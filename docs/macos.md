@@ -3,6 +3,22 @@
 Native arm64 build, no emulation. Graphics go through Vulkan on MoltenVK (Metal underneath). Tested on an Apple M4 with
 macOS 26. The project ships no macOS release; build from source.
 
+## Setting up from scratch
+
+1. Install the toolchain: `brew install cmake ninja shaderc molten-vk vulkan-loader vulkan-headers pkgconf`
+2. Build:
+
+       cmake -G Ninja -B build/macos -DCMAKE_BUILD_TYPE=RelWithDebInfo
+       cmake --build build/macos --target pt
+
+3. Get the three game files from your own copy of the game, a fake PKG you dumped yourself (nothing from the game is
+   in this repository). Extract it with `pkg_extract` from LibOrbisPkg's `PkgTool.Core`; no passcode is needed. The
+   files are in the `uroot/` folder of the output: `chunk1.psarc`, `texture.qar`, `pathid_list_ps4.bin`. Put them in
+   one folder, for example `~/Games/pt-pc-game/CUSA01127`.
+4. Run: `build/macos/pt --game ~/Games/pt-pc-game/CUSA01127`
+5. Optional app bundle: `tools/make-macos-app.sh [build_dir] [game_dir] [icon.png]` (defaults are in the script; the
+   icon is optional and you supply your own PNG). It creates `~/Applications/P.T..app`; re-run it after each rebuild.
+
 ## Build
 
     brew install cmake ninja shaderc molten-vk vulkan-loader vulkan-headers pkgconf
