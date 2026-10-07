@@ -542,7 +542,7 @@ def extract_pack_job(job):
 
 def main():
     ap = argparse.ArgumentParser(description="Read Fox Engine PS4 shader packs (.fsop).")
-    ap.add_argument("--opcodes", type=Path, help="shadPS4 src/shader_recompiler/frontend/opcodes.h")
+    ap.add_argument("--opcodes", type=Path, help="path to opcodes.h (GCN shader opcode list)")
     sub = ap.add_subparsers(dest="command", required=True)
     p = sub.add_parser("list", help="list entries and stages")
     p.add_argument("inputs", nargs="+", type=Path)

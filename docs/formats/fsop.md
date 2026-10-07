@@ -116,5 +116,5 @@ selects, single-use values inlined). 22 stages with loops have no `.expr.txt` bo
 an `index.json` lists entries, hashes, resources and interface. `python tools/fsop.py info <pack> <entry> --stage ps
 --mode expr|pseudo|asm|json` prints one stage.
 
-`tools/gcn.py` reads the opcode names from shadPS4's `src/shader_recompiler/frontend/opcodes.h` (`--opcodes <path>`).
+`tools/gcn.py` reads the opcode names from an `opcodes.h` header (a GCN shader opcode list) (`--opcodes <path>`).
 Every opcode in the four packs decodes.

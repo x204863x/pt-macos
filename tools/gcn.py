@@ -59,7 +59,7 @@ def load_opcodes(path=None):
     if key in _opcode_cache:
         return _opcode_cache[key]
     if not path.exists():
-        raise FileNotFoundError(f"shadPS4 opcodes.h not found at {path}; pass --opcodes")
+        raise FileNotFoundError(f"opcodes.h not found at {path}; pass --opcodes")
     text = path.read_text(encoding="utf-8", errors="replace")
     tables = {}
     for encoding, enum_name in ENUM_NAMES.items():
@@ -1146,7 +1146,7 @@ def main():
     ap.add_argument("binary", type=Path)
     ap.add_argument("--offset", type=lambda s: int(s, 0), default=0)
     ap.add_argument("--length", type=lambda s: int(s, 0))
-    ap.add_argument("--opcodes", type=Path, help="shadPS4 src/shader_recompiler/frontend/opcodes.h")
+    ap.add_argument("--opcodes", type=Path, help="path to opcodes.h (GCN shader opcode list)")
     args = ap.parse_args()
     ops = load_opcodes(args.opcodes)
     data = args.binary.read_bytes()[args.offset:]

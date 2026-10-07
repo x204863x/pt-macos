@@ -123,7 +123,7 @@ def parse(elf):
 def main():
     ap = argparse.ArgumentParser(description="Dump the SCE dynamic linking data of a plain PS4 ELF (see self2elf.py).")
     ap.add_argument("elf", type=Path)
-    ap.add_argument("--nid-db", action="append", default=[], help="GhidraOrbis nid_db.xml or shadPS4 sources; repeatable")
+    ap.add_argument("--nid-db", action="append", default=[], help="GhidraOrbis nid_db.xml or other NID sources; repeatable")
     ap.add_argument("--markdown", type=Path, help="write the import table as markdown")
     args = ap.parse_args()
 

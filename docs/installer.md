@@ -67,7 +67,7 @@ Every release and version of P.T. installs. What differs from the tested US data
 |---|---|---|
 | fake PKG (fPKG) of any P.T. release | installs | helper: PKG magic `7F 43 4E 54`, the PFS key opens with LibOrbisPkg's fake-package keyset, the inner PFSC image is searched for the archives |
 | game folder dumped from the player's console (`CUSA01127`, `CUSA01114-app`, a dumper's output folder) | installs | setup copies the archives, found by their headers |
-| an fPKG extracted to a folder, or an emulator's install folder (shadPS4 writes `CUSA01127/` with the archives at its root) | installs | as a dump folder |
+| an fPKG extracted to a folder, or an emulator's install folder (a `CUSA01127/` folder with the archives at its root) | installs | as a dump folder |
 | a folder that holds no archives but exactly one PKG (for example `user/app/CUSA01127/` copied off a console) | the PKG is used | as a PKG |
 | EU (CUSA01114), JP (CUSA01098) or an unknown P.T. title ID | installs, with a note | see Releases below |
 | archives under other names or in a subfolder of the PKG | installs, with a note | found by content and written under the names the port reads |

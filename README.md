@@ -119,9 +119,6 @@ reverse engineering the game data, with the tools in tools/ that read those form
 P.T. is the work of Kojima Productions and is owned by Konami. This project is not affiliated with, endorsed by or
 connected to either of them. It contains none of their assets and does nothing without your own copy of the game.
 
-The shadPS4 emulator was my reference for how the original behaves on the PS4 and for checking the port's frames
-against it. Thanks to its developers.
-
 The port is built on SDL3, Vulkan (volk, VMA), glm, Dear ImGui, stb, Lua 5.1, libogg and libvorbis, whisper.cpp with
 OpenAI's Whisper model and the Silero VAD for the voice part, Real-ESRGAN with ncnn for the enhanced textures, AMD
 FidelityFX, NVIDIA DLSS and Intel XeSS for the upscalers, the Khronos OpenXR loader for VR, HarfBuzz on Linux and the

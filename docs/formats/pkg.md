@@ -2,7 +2,7 @@
 
 Observed on the EU retail package `EP4511-CUSA01114_00-PPPPPPPPTTTTTTTT.pkg` with `tools/pkginfo.py <pkg> [--extract DIR]`,
 which prints the header, entry table, PFS header and `param.sfo` and writes the plaintext `sce_sys` entries. Field names
-follow shadPS4 and psdevwiki. Header fields are big-endian, the PFS header is little-endian.
+follow psdevwiki. Header fields are big-endian, the PFS header is little-endian.
 
 ## Header
 
@@ -76,7 +76,7 @@ Without the EKPFS, steps 3 and 4 cannot be done off-console. That is why the ins
 | version | 1 |
 | magic | 20130315 |
 | read_only | 1 |
-| mode | 0x0D (signed, encrypted, plus a bit shadPS4 names UnknownFlagAlwaysSet) |
+| mode | 0x0D (signed, encrypted, plus a bit commonly named UnknownFlagAlwaysSet) |
 | block_size | 0x10000 |
 | dinode_count | 4 |
 | data_block_count | 0x502B |

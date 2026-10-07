@@ -2,7 +2,7 @@
 
 All three executables in CUSA01127 are fake-signed SELF files. `tools/self2elf.py <self> <elf>` turns one into a plain
 ELF; `tools/dynlib.py <elf>` then dumps its SCE dynamic linking data (imports and exports, named through a NID database
-when one is given). Field names follow shadPS4.
+when one is given). Field names follow common PS4 community documentation.
 
 ## Header (0x20 bytes, little-endian)
 
