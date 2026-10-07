@@ -1,5 +1,9 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#ifdef __APPLE__
+#include <SDL3/SDL_vulkan.h>
+#include "engine/render/vk_context.h"
+#endif
 #include "engine/platform/update_check.h"
 
 #ifdef _WIN32
@@ -4428,6 +4432,12 @@ int main(int argc, char** argv) {
         app.options.width = static_cast<uint32_t>(app.settings.display.width);
         app.options.height = static_cast<uint32_t>(app.settings.display.height);
         app.options.vsync = app.settings.display.vsync;
+#ifdef __APPLE__
+        // SDL would look for libvulkan.dylib in the system paths only, and Homebrew's is not one of them
+        if (const std::string loader = pt::vk::MacVulkanLibrary(); !loader.empty() && !SDL_Vulkan_LoadLibrary(loader.c_str())) {
+            pt::LogError("SDL_Vulkan_LoadLibrary({}): {}", loader, SDL_GetError());
+        }
+#endif
         app.window = SDL_CreateWindow("P.T.", app.settings.display.width, app.settings.display.height,
                                       SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
         if (!app.window) {

@@ -1,3 +1,11 @@
+if(APPLE)
+  # No Real-ESRGAN build exists for macOS (the project ships Windows and Linux ones): enhanced textures stay off, the
+  # settings page reports the missing texture-tools folder and the original textures are used (docs/macos.md)
+  add_custom_command(TARGET pt POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:pt>/licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${bc7enc_SOURCE_DIR}/LICENSE" "$<TARGET_FILE_DIR:pt>/licenses/bc7enc.txt" VERBATIM)
+  return()
+endif()
 set(PT_TEXTURE_RUNTIME_DIR "${CMAKE_BINARY_DIR}/_deps/texture-runtime" CACHE PATH "Real-ESRGAN runtime cache")
 # the upscaler's own release build for the target platform (the Windows one needs vcomp140.dll beside it)
 if(WIN32)

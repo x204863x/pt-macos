@@ -4,8 +4,12 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <string>
+#ifdef __APPLE__
+#include <dlfcn.h>
+#endif
 
 #include "engine/core/crash_report.h"
 #include "engine/core/log.h"
@@ -15,6 +19,30 @@ extern bool g_checkpoints;
 }
 
 namespace pt::vk {
+
+#ifdef __APPLE__
+std::string MacVulkanLibrary() {
+    static const std::string found = [] {
+        std::vector<std::string> candidates;
+        if (const char* forced = std::getenv("PT_VULKAN_LIBRARY")) candidates.push_back(forced);
+        candidates.insert(candidates.end(), {"@executable_path/libvulkan.1.dylib", "libvulkan.1.dylib", "/opt/homebrew/lib/libvulkan.1.dylib",
+            "/usr/local/lib/libvulkan.1.dylib", "/opt/homebrew/lib/libMoltenVK.dylib", "/usr/local/lib/libMoltenVK.dylib"});
+        for (const std::string& name : candidates) {
+            if (void* module = dlopen(name.c_str(), RTLD_NOW | RTLD_LOCAL)) {
+                const bool ok = dlsym(module, "vkGetInstanceProcAddr") != nullptr;
+                dlclose(module);
+                if (ok) {
+                    LogInfo("vulkan: loader {}", name);
+                    return name;
+                }
+            }
+        }
+        return std::string();
+    }();
+    return found;
+}
+#endif
+
 namespace {
 
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT,
@@ -68,9 +96,32 @@ bool HasLayer(const char* name) {
     return std::any_of(layers.begin(), layers.end(), [&](const VkLayerProperties& l) { return std::strcmp(l.layerName, name) == 0; });
 }
 
+
+#ifdef __APPLE__
+/* macOS has no system Vulkan loader. volk and SDL only look for libvulkan.dylib in the usual library paths, which leaves out
+   Homebrew's /opt/homebrew/lib (and Finder launches get no DYLD_LIBRARY_PATH), so the loader is opened here by path:
+   PT_VULKAN_LIBRARY, a copy beside the executable, Homebrew's loader, then MoltenVK itself (it exports the same entry point). */
+PFN_vkGetInstanceProcAddr LoadMacVulkan() {
+    const std::string name = MacVulkanLibrary();
+    if (name.empty()) return nullptr;
+    void* module = dlopen(name.c_str(), RTLD_NOW | RTLD_LOCAL);
+    return module ? reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(module, "vkGetInstanceProcAddr")) : nullptr;
+}
+#endif
+
 }
 
 bool Context::Init(SDL_Window* window, bool validation) {
+#ifdef __APPLE__
+    if (!loader) {
+        PFN_vkGetInstanceProcAddr proc = LoadMacVulkan();
+        if (!proc) {
+            LogError("vulkan: no Vulkan loader found (brew install vulkan-loader molten-vk, or set PT_VULKAN_LIBRARY)");
+            return false;
+        }
+        volkInitializeCustom(proc);
+    } else
+#endif
     if (loader) {
         /* With Streamline loaded, instance, device and swapchain must come from its proxies, so volk takes the interposer's loader instead of vulkan-1.dll. */
         volkInitializeCustom(loader);
@@ -91,11 +142,29 @@ bool Context::Init(SDL_Window* window, bool validation) {
         validation = false;
     }
 
+    VkInstanceCreateFlags instance_flags = 0;
+#ifdef __APPLE__
+    {
+        /* MoltenVK is a portability driver: the loader hides it unless the instance asks to enumerate portability devices */
+        uint32_t count = 0;
+        vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
+        std::vector<VkExtensionProperties> available(count);
+        vkEnumerateInstanceExtensionProperties(nullptr, &count, available.data());
+        if (std::any_of(available.begin(), available.end(),
+                        [](const VkExtensionProperties& e) { return std::strcmp(e.extensionName, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0; })) {
+            if (std::none_of(extensions.begin(), extensions.end(), [](const char* e) { return std::strcmp(e, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0; }))
+                extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+            instance_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+        }
+    }
+#endif
+
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     app.pApplicationName = "pt-port";
     app.pEngineName = "pt-port";
     app.apiVersion = VK_API_VERSION_1_3;
     VkInstanceCreateInfo instance_info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    instance_info.flags = instance_flags;
     instance_info.pApplicationInfo = &app;
     instance_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     instance_info.ppEnabledExtensionNames = extensions.data();
@@ -225,6 +294,10 @@ bool Context::Init(SDL_Window* window, bool validation) {
                 device_extensions.push_back(name);
             }
         };
+        if (has("VK_KHR_portability_subset")) {
+            /* mandatory to enable when the device offers it (MoltenVK) */
+            add("VK_KHR_portability_subset");
+        }
         if (has(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
             add(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
             memory_budget = true;

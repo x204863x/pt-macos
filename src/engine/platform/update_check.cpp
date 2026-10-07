@@ -134,7 +134,11 @@ std::string_view Platform() {
 #ifdef _WIN32
     return "windows";
 #else
+#ifdef __APPLE__
+    return "macos";  // the releases have no macOS build: no entry in the manifest, so no update notice
+#else
     return "linux";
+#endif
 #endif
 }
 

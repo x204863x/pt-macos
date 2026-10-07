@@ -1,7 +1,11 @@
 #include "engine/audio/sound_engine.h"
 
+#if defined(__aarch64__)
+#include <cstdint>
+#else
 #include <pmmintrin.h>
 #include <xmmintrin.h>
+#endif
 
 #include <algorithm>
 #include <bit>
@@ -3495,14 +3499,33 @@ void SoundEngine::RenderBlock(float* out, uint32_t frames) {
     stats_.peak_right = std::max(stats_.peak_right * 0.95f, peak_r);
 }
 
+namespace {
+// flush-to-zero for the render thread: MXCSR FTZ|DAZ on x86, FPCR.FZ on arm64 (Apple silicon)
+#if defined(__aarch64__)
+uint64_t EnableFlushToZero() {
+    uint64_t fpcr;
+    __asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
+    __asm__ volatile("msr fpcr, %0" : : "r"(fpcr | (1ull << 24)));
+    return fpcr;
+}
+void RestoreFloatControl(uint64_t fpcr) { __asm__ volatile("msr fpcr, %0" : : "r"(fpcr)); }
+#else
+unsigned int EnableFlushToZero() {
+    const unsigned int csr = _mm_getcsr();
+    _mm_setcsr(csr | 0x8040);
+    return csr;
+}
+void RestoreFloatControl(unsigned int csr) { _mm_setcsr(csr); }
+#endif
+}
+
 void SoundEngine::Render(float* out, uint32_t frames) {
     if (frozen_.load()) {
         std::memset(out, 0, sizeof(float) * frames * 2);
         motion_levels_.store(0, std::memory_order_relaxed);
         return;
     }
-    const unsigned int csr = _mm_getcsr();
-    _mm_setcsr(csr | 0x8040);
+    const auto csr = EnableFlushToZero();
     {
         std::lock_guard lock(command_mutex_);
         command_work_.swap(commands_);
@@ -3555,7 +3578,7 @@ void SoundEngine::Render(float* out, uint32_t frames) {
         stats_.sequencers = static_cast<uint32_t>(sequencers_.size());
         stats_.music = static_cast<uint32_t>(music_.size());
     }
-    _mm_setcsr(csr);
+    RestoreFloatControl(csr);
 }
 
 }

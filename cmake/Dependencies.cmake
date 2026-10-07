@@ -40,6 +40,11 @@ set(GGML_BACKEND_DL ON CACHE BOOL "" FORCE)
 set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(GGML_CCACHE OFF CACHE BOOL "" FORCE)
+if(APPLE)
+  # CPU (NEON/i8mm/SME variants) and Accelerate only: ggml's Metal backend needs the Objective-C language, which this
+  # project does not enable, and the speech model is small enough for the CPU (docs/macos.md)
+  set(GGML_METAL OFF CACHE BOOL "" FORCE)
+endif()
 set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
@@ -57,7 +62,11 @@ foreach(lib whisper ggml ggml-base)
     # plain libwhisper.so files (no version symlinks to package) that find each other in voice/
     set_property(TARGET ${lib} PROPERTY VERSION)
     set_property(TARGET ${lib} PROPERTY SOVERSION)
-    set_target_properties(${lib} PROPERTIES BUILD_RPATH "$ORIGIN")
+    if(APPLE)
+      set_target_properties(${lib} PROPERTIES BUILD_RPATH "@loader_path" INSTALL_NAME_DIR "@rpath" BUILD_WITH_INSTALL_NAME_DIR ON)
+    else()
+      set_target_properties(${lib} PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
   endif()
 endforeach()
 # ggml gives clang-cl only the MSVC /arch switch of a variant, which leaves out the instruction sets its intrinsics
@@ -71,7 +80,8 @@ set(PT_GGML_VARIANT_FLAGS
   "cascadelake|-msse4.2 -mavx -mavx2 -mfma -mf16c -mbmi2 -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mavx512vnni"
   "icelake|-msse4.2 -mavx -mavx2 -mfma -mf16c -mbmi2 -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mavx512vbmi -mavx512vnni"
   "alderlake|-msse4.2 -mavx -mavx2 -mfma -mf16c -mbmi2 -mavxvnni")
-foreach(variant x64 sse42 sandybridge ivybridge piledriver haswell skylakex cannonlake cascadelake icelake cooperlake zen4 alderlake sapphirerapids)
+foreach(variant x64 sse42 sandybridge ivybridge piledriver haswell skylakex cannonlake cascadelake icelake cooperlake zen4 alderlake sapphirerapids
+    apple_m1 apple_m2_m3 apple_m4)
   if(TARGET ggml-cpu-${variant})
     add_dependencies(pt_voice_runtime ggml-cpu-${variant})
     set_target_properties(ggml-cpu-${variant} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PT_VOICE_DIR} LIBRARY_OUTPUT_DIRECTORY ${PT_VOICE_DIR})

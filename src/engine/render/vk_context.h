@@ -10,6 +10,11 @@ struct SDL_Window;
 
 namespace pt::vk {
 
+#ifdef __APPLE__
+/* path of the Vulkan loader (or MoltenVK) to use on macOS, empty when none is installed (see vk_context.cpp) */
+std::string MacVulkanLibrary();
+#endif
+
 class Context;
 
 class ContextHooks {
