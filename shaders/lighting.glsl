@@ -1,6 +1,23 @@
+#ifdef PT_SHADOW_MANUAL
+/* MoltenVK (Metal): sampling images[IMG_SHADOW] through a comparison sampler makes SPIRV-Cross declare the whole images[] array as depth
+   textures, so every other fetch from images[] in the same shader (normal, material, ...) returns the red channel in all four. The compare
+   and the bilinear weights of the hardware (LESS, linear, clamp to edge) are done by hand with plain texel fetches instead. */
+float ShadowTap(vec2 uv, float zref) {
+    const ivec2 size = ivec2(ImgSize(IMG_SHADOW));
+    const vec2 p = uv * vec2(size) - 0.5;
+    const vec2 f = fract(p);
+    const ivec2 i0 = ivec2(floor(p));
+    const ivec2 hi = size - 1;
+    const vec4 d = vec4(ImgFetch(IMG_SHADOW, clamp(i0, ivec2(0), hi)).x, ImgFetch(IMG_SHADOW, clamp(i0 + ivec2(1, 0), ivec2(0), hi)).x,
+                        ImgFetch(IMG_SHADOW, clamp(i0 + ivec2(0, 1), ivec2(0), hi)).x, ImgFetch(IMG_SHADOW, clamp(i0 + ivec2(1, 1), ivec2(0), hi)).x);
+    const vec4 lit = vec4(lessThan(vec4(zref), d));
+    return mix(mix(lit.x, lit.y, f.x), mix(lit.z, lit.w, f.x), f.y);
+}
+#else
 float ShadowTap(vec2 uv, float zref) {
     return texture(sampler2DShadow(images[IMG_SHADOW], samplers[SMP_SHADOW]), vec3(uv, zref));
 }
+#endif
 
 vec2 Dither2x2(vec3 frag) {
     return vec2(fract(0.5 * (frag.x - 0.5)) >= 0.3 ? 1.0 : -1.0, fract(0.5 * (frag.y - 0.5)) >= 0.3 ? 1.0 : -1.0);

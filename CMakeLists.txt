@@ -160,6 +160,10 @@ foreach(entry ${PT_UPSCALER_NOTICES})
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${source}" "$<TARGET_FILE_DIR:pt>/licenses/${name}" VERBATIM)
 endforeach()
 
+if(APPLE)
+  # MoltenVK cannot mix a comparison sampler and plain fetches on the images[] array (see shaders/lighting.glsl)
+  set(PT_SHADER_DEFINES -DPT_SHADOW_MANUAL)
+endif()
 file(GLOB PT_SHADERS CONFIGURE_DEPENDS shaders/*.vert shaders/*.frag shaders/*.comp)
 set(PT_SPIRV_DIR ${CMAKE_BINARY_DIR}/shaders)
 set(PT_SPIRV_OUTPUTS)
@@ -168,7 +172,7 @@ foreach(shader ${PT_SHADERS})
   set(out ${PT_SPIRV_DIR}/${name}.spv)
   add_custom_command(OUTPUT ${out}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${PT_SPIRV_DIR}
-    COMMAND ${Vulkan_GLSLC_EXECUTABLE} --target-env=vulkan1.3 -O -MD -MF ${out}.d ${shader} -o ${out}
+    COMMAND ${Vulkan_GLSLC_EXECUTABLE} --target-env=vulkan1.3 -O ${PT_SHADER_DEFINES} -MD -MF ${out}.d ${shader} -o ${out}
     DEPENDS ${shader} DEPFILE ${out}.d VERBATIM)
   list(APPEND PT_SPIRV_OUTPUTS ${out})
 endforeach()
