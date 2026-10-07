@@ -29,6 +29,8 @@ Build/
 *.sbp
 *.bnk
 *.wem
+*.psarc
+*.icns
 
 __pycache__/
 *.pyc

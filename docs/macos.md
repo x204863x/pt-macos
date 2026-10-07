@@ -1,6 +1,6 @@
 # macOS (Apple silicon)
 
-Native arm64 build, no emulation. Graphics go through Vulkan on MoltenVK (Metal underneath). Tested on an Apple M4 with
+Native arm64 build, no emulation. Graphics go through Vulkan on MoltenVK (Metal underneath). Tested on Apple Silicon with
 macOS 26. The project ships no macOS release; build from source.
 
 ## Setting up from scratch
@@ -17,14 +17,7 @@ macOS 26. The project ships no macOS release; build from source.
    one folder, for example `~/Games/pt-pc-game/CUSA01127`.
 4. Run: `build/macos/pt --game ~/Games/pt-pc-game/CUSA01127`
 5. Optional app bundle: `tools/make-macos-app.sh [build_dir] [game_dir] [icon.png]` (defaults are in the script; the
-   icon is optional and you supply your own PNG). It creates `~/Applications/P.T..app`; re-run it after each rebuild.
-
-## Build
-
-    brew install cmake ninja shaderc molten-vk vulkan-loader vulkan-headers pkgconf
-    cmake -G Ninja -B build/macos -DCMAKE_BUILD_TYPE=RelWithDebInfo
-    cmake --build build/macos --target pt
-    build/macos/pt --game <folder with chunk1.psarc, texture.qar, pathid_list_ps4.bin>
+   app icon is optional: pass your own PNG, e.g. `sce_sys/icon0.png` from your own game dump). It creates `~/Applications/P.T..app`; re-run it after each rebuild.
 
 `shaderc` provides `glslc`; the Vulkan loader and MoltenVK are loaded at run time. Settings, saves and `pt.log` live in
 `~/Library/Application Support/pt-port/pt/` (SDL's pref path).
@@ -47,13 +40,13 @@ macOS 26. The project ships no macOS release; build from source.
 
 ## App bundle (double-click launch)
 
-`tools/make-macos-app.sh [build_dir] [game_dir] [icon.png]` (writes Info.plist itself; LSMinimumSystemVersion is taken from the binary's minos, 26.0 here) builds `~/Applications/P.T..app` (bundle id `local.ptport.pt`,
+`tools/make-macos-app.sh [build_dir] [game_dir] [icon.png]` (writes Info.plist itself; LSMinimumSystemVersion is taken from the binary's minos) builds `~/Applications/P.T..app` (bundle id `local.ptport.pt`,
 `NSMicrophoneUsageDescription` set, category games, ad-hoc signed, no quarantine). No source change was needed:
 the window comes to the front when the app is opened with `open` (a Finder double-click was not tested).
 
     P.T..app/Contents/Info.plist
     P.T..app/Contents/MacOS/pt                  copy of build/macos/pt (a signed bundle needs a regular-file executable)
-    P.T..app/Contents/Resources/PT.icns         from ICON0_PNG in PT.pkg (offset 0x183E0, length 0x906A4, 512x512)
+    P.T..app/Contents/Resources/PT.icns         made from the optional PNG you pass (512x512)
     P.T..app/Contents/Resources/{shaders,fonts,voice,bin,licenses}  symlinks into build/macos
     P.T..app/Contents/Resources/pt              copy of the binary: the Museum and Loop Browser previews spawn
                                                  SDL_GetBasePath()/pt (= Resources/pt) as a helper process
@@ -61,11 +54,9 @@ the window comes to the front when the app is opened with `open` (a Finder doubl
 
 `SDL_GetBasePath()` returns `Contents/Resources/` inside a bundle, so shaders, fonts, voice models and
 `game/CUSA01127` (found by `FindGameDir`) resolve there. After rebuilding `build/macos`, re-run the script to refresh the
-copied binary (resources follow the symlinks). To recreate the icon, extract the PNG with
-`dd`/python from the PKG and pass it as the third argument. Info.plist keys: CFBundleExecutable pt, CFBundleIdentifier
-local.ptport.pt, CFBundleName P.T., CFBundleIconFile PT, LSMinimumSystemVersion 26.0, NSHighResolutionCapable,
-LSApplicationCategoryType public.app-category.games, NSMicrophoneUsageDescription. The Desktop item "P.T." is a symlink
-to the app (Finder automation was not permitted, so no Finder alias). The game has no single-instance lock; settings and `pt.log` are shared with a plain `build/macos/pt`.
+copied binary (resources follow the symlinks). The icon is optional; pass your own PNG as the third argument. Info.plist keys: CFBundleExecutable pt, CFBundleIdentifier
+local.ptport.pt, CFBundleName P.T., CFBundleIconFile PT, LSMinimumSystemVersion (from the binary), NSHighResolutionCapable,
+LSApplicationCategoryType public.app-category.games, NSMicrophoneUsageDescription. The game has no single-instance lock; settings and `pt.log` are shared with a plain `build/macos/pt`.
 
 ## Lighting fix: speckled floors and walls, dark rooms
 
@@ -104,7 +95,7 @@ shadow on the ajar door is a real shadow of the light above (`shadow_quality = 0
 - FSR, DLSS, XeSS, frame generation, OpenXR: Windows-only, off (as on Linux).
 - Enhanced textures (Real-ESRGAN): no macOS binary, so the option reports missing texture tools and the original textures
   are used. It is off by default.
-- Voice (whisper.cpp): works, CPU only (no Metal backend). The `ggml-cpu-apple_m4` variant is chosen on an M4.
+- Voice (whisper.cpp): works, CPU only (no Metal backend). The matching `ggml-cpu-apple_*` variant is chosen for the CPU.
 - Crash dump and folder picker: none (as on Linux). A plain `build/macos/pt` needs `--game`; the app bundle finds the data itself.
 - `tools/walkthrough.py` scenario `voice` needs Windows PowerShell TTS and cannot run; use `pt --voice-test <wav>`.
 
