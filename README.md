@@ -114,6 +114,11 @@ helper in C# that reads fake PKGs with LibOrbisPkg. docs/installer.md describes 
 Other docs: docs/upscaling.md, docs/vr.md, docs/updates.md, and the file format notes in docs/formats/ that came out of
 reverse engineering the game data, with the tools in tools/ that read those formats.
 
+## macOS (Apple silicon)
+
+A native arm64 build runs on macOS 14 or newer through MoltenVK. This repository's fork publishes a self-contained, ad-hoc signed app
+as a GitHub release; you bring your own game files. Install, build from source, packaging and what is off: docs/macos.md.
+
 ## Thanks
 
 P.T. is the work of Kojima Productions and is owned by Konami. This project is not affiliated with, endorsed by or

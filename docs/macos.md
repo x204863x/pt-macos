@@ -1,28 +1,79 @@
 # macOS (Apple silicon)
 
-Native arm64 build, no emulation. Graphics go through Vulkan on MoltenVK (Metal underneath). Tested on Apple Silicon with
-macOS 26. The project ships no macOS release; build from source.
+Native arm64 build, no emulation. Graphics go through Vulkan on MoltenVK (Metal underneath). Built for macOS 14 and newer;
+tested only on macOS 26 (Apple M4), the macOS 14 and 15 runs are not verified. The release is ad-hoc signed, not notarized.
 
-## Setting up from scratch
+## Install from a release
 
-1. Install the toolchain: `brew install cmake ninja shaderc molten-vk vulkan-loader vulkan-headers pkgconf`
-2. Build:
+Short version, in `INSTALL-macOS.md` (also attached to each release):
 
-       cmake -G Ninja -B build/macos -DCMAKE_BUILD_TYPE=RelWithDebInfo
-       cmake --build build/macos --target pt
+1. Unzip `P.T.-macOS-arm64-<version>.zip`, move `P.T..app` to Applications.
+2. First start: macOS blocks it (not notarized). Open it once, then System Settings > Privacy & Security > "Open Anyway".
+3. Get the game files from your own PT.pkg: `tools/macos/extract-pkg.sh /path/to/PT.pkg` puts `chunk1.psarc`, `texture.qar`
+   and `pathid_list_ps4.bin` in `~/Library/Application Support/pt-port/game/CUSA01127`. The helper downloads LibOrbisPkg's
+   `PkgTool.Core` (osx-x64 0.2.231, pinned by SHA-256, needs Rosetta), runs `pkg_extract` without a passcode, copies only those
+   three files and removes its temporary files. It only reads the PKG. Nothing from the game is in this repository or the release.
+4. Start the app. Where it looks for the game, in order: `--game <folder>`; `game/CUSA01127` or `CUSA01127` next to the app
+   (up to five folders up); `~/Library/Application Support/pt-port/game/CUSA01127`; the folder remembered in
+   `~/Library/Application Support/pt-port/pt/game_dir.txt`. If none is found, a folder dialog opens; the folder must hold the
+   three files (otherwise a message and the dialog again); the choice is saved in `game_dir.txt`. Cancel closes the game with the
+   "files not found" message. Pass `--game` to override everything.
 
-3. Get the three game files from your own copy of the game, a fake PKG you dumped yourself (nothing from the game is
-   in this repository). Extract it with `pkg_extract` from LibOrbisPkg's `PkgTool.Core`; no passcode is needed. The
-   files are in the `uroot/` folder of the output: `chunk1.psarc`, `texture.qar`, `pathid_list_ps4.bin`. Put them in
-   one folder, for example `~/Games/pt-pc-game/CUSA01127`.
-4. Run: `build/macos/pt --game ~/Games/pt-pc-game/CUSA01127`
-5. Optional app bundle: `tools/make-macos-app.sh [build_dir] [game_dir] [icon.png]` (defaults are in the script; the
-   app icon is optional: pass your own PNG, e.g. `sce_sys/icon0.png` from your own game dump). It creates `~/Applications/P.T..app`; re-run it after each rebuild.
+Settings (`pt.ini`), saves, `game_dir.txt` and `pt.log` live in `~/Library/Application Support/pt-port/pt/`. Mods go in
+`~/Library/Application Support/pt-port/pt/mods/` (see docs/modding.md; the folder next to the program is not used on macOS).
+The microphone prompt (voice recognition scene) appears when that is first used.
 
-`shaderc` provides `glslc`; the Vulkan loader and MoltenVK are loaded at run time. Settings, saves and `pt.log` live in
-`~/Library/Application Support/pt-port/pt/` (SDL's pref path).
+## Build from source
 
-## Changes for macOS
+    brew install cmake ninja shaderc pkgconf molten-vk vulkan-headers
+    cmake -G Ninja -B build/macos-release -DCMAKE_BUILD_TYPE=Release
+    cmake --build build/macos-release
+    build/macos-release/pt --game <folder>
+
+`shaderc` provides `glslc`. CMake sets `CMAKE_OSX_DEPLOYMENT_TARGET` 14.0 and arm64 (the cache values can be changed, but only 14.0
+is tested). Homebrew's MoltenVK is used by a plain `build/.../pt` (development); the app bundle carries its own.
+
+### Package the app bundle
+
+    python3 tools/macos/package.py [--build-dir build/macos-release] [--revision 1]
+
+Writes `dist/macos/`: `P.T..app`, `P.T.-macOS-arm64-<project version>-macos.<revision>.zip` (made with `ditto -c -k --keepParent`),
+`SHA256SUMS.txt`, `INSTALL-macOS.md`. `--app-only` stops after the signed app (use `--allow-non-release` with a RelWithDebInfo build).
+Layout (real files, no symlinks):
+
+    P.T..app/Contents/Info.plist              bundle id io.github.x204863x.ptmacos, microphone usage text, games category,
+                                              LSMinimumSystemVersion from the binary (14.0), high-res capable
+    P.T..app/Contents/MacOS/pt                the game (also the preview helper process: it is started by its own path)
+    P.T..app/Contents/Frameworks/libMoltenVK.dylib   MoltenVK 1.4.2, official Khronos release, arm64 slice, pinned by version + SHA-256
+    P.T..app/Contents/Resources/{shaders,fonts,voice,licenses}   SPIR-V, fonts, whisper runtime and models, licenses
+                                              (including MoltenVK's Apache-2.0 text and this project's MIT license)
+
+The script refuses a non-Release build, checks that every Mach-O has minos <= 14.0 and depends only on system libraries or the bundle,
+signs the libraries and the bundle ad hoc, and runs `codesign --verify --deep --strict`. There is no icon (the default one): an icon
+would have to come from the game's assets, which this project does not redistribute. You can add your own to your local copy.
+
+### How Vulkan is loaded
+
+macOS has no system Vulkan loader. SDL and volk can use `libMoltenVK.dylib` directly (it exports `vkGetInstanceProcAddr`), so the
+bundle does not ship the Khronos loader. `MacVulkanLibrary()` (`src/engine/render/vk_context.cpp`) tries, in order: `PT_VULKAN_LIBRARY`;
+`Contents/Frameworks/libMoltenVK.dylib`; `libMoltenVK.dylib` / `libvulkan.1.dylib` next to the executable; Homebrew's
+`libvulkan.1.dylib`, then `libMoltenVK.dylib` (`/opt/homebrew`, `/usr/local`). The chosen file is logged as `vulkan: loader <path>`.
+`SDL_Vulkan_LoadLibrary` gets the same path before the window is created.
+
+## What is different or off on macOS
+
+- Ray tracing: MoltenVK has no `VK_KHR_acceleration_structure`; the renderer reports "ray queries unavailable" and uses its fallback.
+- FSR, DLSS, XeSS, frame generation, OpenXR: Windows-only, off (as on Linux).
+- Enhanced textures (Real-ESRGAN): no macOS binary; the option reports missing tools and the original textures are used.
+- Voice (whisper.cpp): works, CPU only (no Metal backend); the matching `ggml-cpu-apple_*` variant is chosen for the CPU.
+- No crash dump. No Windows installer; no self-update (the update check only reports a newer macOS release).
+- `tools/walkthrough.py` scenario `voice` needs Windows PowerShell TTS and cannot run; use `pt --voice-test <wav>`.
+- Not tested: a Finder double-click on a fresh Mac with Gatekeeper, the microphone prompt, macOS 14/15, Intel Macs (not supported).
+- If the game-folder dialog is open, quitting the app (Cmd-Q, SIGTERM) does not close it; use Cancel in the dialog.
+
+## Source changes for macOS
+
+Everything is behind `__APPLE__` / `if(APPLE)`; Windows and Linux are unchanged except where noted.
 
 | File | Change |
 |---|---|
@@ -37,26 +88,13 @@ macOS 26. The project ships no macOS release; build from source.
 | `cmake/Dependencies.cmake` | `GGML_METAL=OFF` (needs the Objective-C language, which the project does not enable; CPU + Accelerate is used); `@loader_path` rpath for the voice libraries; the Apple CPU variants (`apple_m1`, `apple_m2_m3`, `apple_m4`) join the `pt_voice_runtime` set. |
 | `shaders/lighting.glsl`, `CMakeLists.txt` | `-DPT_SHADOW_MANUAL` on Apple: manual shadow compare, see "Lighting fix" below. |
 | `cmake/EnhancedTextures.cmake` | on Apple do not download the Linux Real-ESRGAN build. |
+| `src/engine/core/resource_path.{h,cpp}` | `SelfExecutablePath()` (`_NSGetExecutablePath`): the museum and loop preview helper processes are started by the executable's own path, because `SDL_GetBasePath()` is `Contents/Resources` in a bundle. |
+| `src/main.cpp` | `FindGameDir`: `~/Library/Application Support/pt-port/game/CUSA01127` and an SDL folder dialog; mods read from the user data folder. |
+| `src/engine/anim/anim_test.cpp` | floating-point `std::from_chars` needs macOS 26's libc++; `strtod` is used on Apple (deployment target 14). |
+| `CMakeLists.txt` | deployment target 14.0, arm64. |
 
-## App bundle (double-click launch)
-
-`tools/make-macos-app.sh [build_dir] [game_dir] [icon.png]` (writes Info.plist itself; LSMinimumSystemVersion is taken from the binary's minos) builds `~/Applications/P.T..app` (bundle id `local.ptport.pt`,
-`NSMicrophoneUsageDescription` set, category games, ad-hoc signed, no quarantine). No source change was needed:
-the window comes to the front when the app is opened with `open` (a Finder double-click was not tested).
-
-    P.T..app/Contents/Info.plist
-    P.T..app/Contents/MacOS/pt                  copy of build/macos/pt (a signed bundle needs a regular-file executable)
-    P.T..app/Contents/Resources/PT.icns         made from the optional PNG you pass (512x512)
-    P.T..app/Contents/Resources/{shaders,fonts,voice,bin,licenses}  symlinks into build/macos
-    P.T..app/Contents/Resources/pt              copy of the binary: the Museum and Loop Browser previews spawn
-                                                 SDL_GetBasePath()/pt (= Resources/pt) as a helper process
-    P.T..app/Contents/Resources/game/CUSA01127  symlink to the game folder
-
-`SDL_GetBasePath()` returns `Contents/Resources/` inside a bundle, so shaders, fonts, voice models and
-`game/CUSA01127` (found by `FindGameDir`) resolve there. After rebuilding `build/macos`, re-run the script to refresh the
-copied binary (resources follow the symlinks). The icon is optional; pass your own PNG as the third argument. Info.plist keys: CFBundleExecutable pt, CFBundleIdentifier
-local.ptport.pt, CFBundleName P.T., CFBundleIconFile PT, LSMinimumSystemVersion (from the binary), NSHighResolutionCapable,
-LSApplicationCategoryType public.app-category.games, NSMicrophoneUsageDescription. The game has no single-instance lock; settings and `pt.log` are shared with a plain `build/macos/pt`.
+Related prior work (MIT) that solved the same packaging problems: the upstream pull request LoreanXavier/pt-pc#4 and the
+`macos-arm64-preview-2` branch of ignusloki/pt-pc. This implementation was written independently; no code was copied from them.
 
 ## Lighting fix: speckled floors and walls, dark rooms
 
@@ -88,27 +126,11 @@ shadow on the ajar door is a real shadow of the light above (`shadow_quality = 0
 `pt_reflection_mix_test` fails one case ("blend both reflection sources": the shader computes (0.667, 0.333, 0, 0.3), the test expects
 (0.8, 0.2, 0, 0.5)); it fails the same before and after, and was not checked on another platform.
 
-## Degraded or off
-
-- Ray tracing: MoltenVK has no `VK_KHR_acceleration_structure`; the renderer reports "ray queries unavailable" and uses its
-  fallback.
-- FSR, DLSS, XeSS, frame generation, OpenXR: Windows-only, off (as on Linux).
-- Enhanced textures (Real-ESRGAN): no macOS binary, so the option reports missing texture tools and the original textures
-  are used. It is off by default.
-- Voice (whisper.cpp): works, CPU only (no Metal backend). The matching `ggml-cpu-apple_*` variant is chosen for the CPU.
-- Crash dump and folder picker: none (as on Linux). A plain `build/macos/pt` needs `--game`; the app bundle finds the data itself.
-- `tools/walkthrough.py` scenario `voice` needs Windows PowerShell TTS and cannot run; use `pt --voice-test <wav>`.
-
 ## Checks
 
-    build/macos/pt --headless --game <folder> --frames 300 --no-save --audio-offline --log out.log
-    python3 tools/walkthrough.py early f060 lisa loops --exe $PWD/build/macos/pt --game <folder>
+    python3 -I tools/walkthrough.py early f060 lisa loops --exe <abs path>/P.T..app/Contents/MacOS/pt --game <folder>
 
-(`--exe` must be an absolute path.) Unit tests build with the rest; `pt_platform_test --network`, `pt_tests`, the
-collision, mods, localization, multilingual, save and settings tests pass.
-
-App bundle caveats: the bundle holds copies of the binary (`MacOS/pt` and `Resources/pt`, both written via a temp file and `mv`), so
-re-run the script after every rebuild. The symlinks to outside the bundle (`shaders`, `fonts`, `voice`, `bin`, `licenses`, `game/`)
-make `codesign --strict` complain ("invalid destination for symbolic link"); the signature is still applied and
-`codesign --verify --deep` passes. Only launching through `open` (LaunchServices) was tested, not a Finder double-click or the
-microphone prompt.
+(`--exe` must be an absolute path.) Unit tests build with the rest; `pt_tests`, collision, mods, platform, graphics preset, language default,
+localization, multilingual, save reset/status and settings round-trip pass (some take the game folder or a not-yet-existing scratch folder as
+argument, see the sources). `pt_reflection_mix_test` fails one case ("blend both reflection sources"); it failed before this work and was not
+checked on another platform.
