@@ -42,7 +42,7 @@ Settings (`pt.ini`), the save, the log (`pt.log`) and mods live in `~/Library/Ap
 
 These come from the original port; they are not all re-tested on macOS. Everything is off or at the original's behaviour by default.
 
-- Window, borderless or fullscreen, any resolution, v-sync; graphics presets and individual controls (shadow size, contact shadows,
+- Window, borderless or fullscreen, any resolution, v-sync; graphics presets and individual controls (shadow size,
   anisotropic filtering, film grain, motion blur, depth of field, lens effects).
 - Photo mode (F7), free camera (F6), a loop browser and a museum of the game's content, Game+, a speedrun timer with LiveSplit support.
 - English, French, German, Spanish, Italian, Portuguese and Japanese from the original, plus Turkish, Simplified Chinese, Arabic, Russian and
@@ -52,8 +52,8 @@ These come from the original port; they are not all re-tested on macOS. Everythi
 
 ## What is off on macOS
 
-- Ray-traced shadows, ambient occlusion and reflections: MoltenVK has no ray queries; the renderer uses its fallback.
-- FSR, DLSS and XeSS upscaling, frame generation, and VR (OpenXR): Windows or Linux only.
+- Ray-traced shadows, contact shadows, ambient occlusion and reflections: MoltenVK has no ray queries; the renderer uses its fallback.
+- FSR, DLSS and XeSS upscaling, frame generation, and VR (OpenXR): Windows only.
 - Enhanced textures (Real-ESRGAN): there is no macOS build of the tool, so the original textures are used.
 - Voice recognition runs on the CPU only.
 - No crash dump and no self-update.
@@ -82,7 +82,7 @@ platform checks). Other docs: docs/upscaling.md, docs/vr.md, docs/updates.md, an
 The port is by LoreanXavier ([pt-pc](https://github.com/LoreanXavier/pt-pc)) and its own code is under the MIT license (see LICENSE); the
 macOS changes here are under the same license. P.T. belongs to Kojima Productions and Konami, and none of its assets are included.
 
-Built on SDL3, zlib, Vulkan (volk, VMA), glm, Dear ImGui, stb, Lua 5.1, libogg and libvorbis, HarfBuzz, whisper.cpp with OpenAI's Whisper
+Built on SDL3, zlib, Vulkan (volk, VMA), glm, Dear ImGui, stb, Lua 5.1, libogg and libvorbis, HarfBuzz, bc7enc, whisper.cpp with OpenAI's Whisper
 model and the Silero VAD for the voice part, the Noto fonts for the added languages, the ww2ogg codebook library, and, on macOS,
 MoltenVK (Khronos Group, Apache-2.0). Their notices ship in the app's `Contents/Resources/licenses/`. The extraction helper downloads
 LibOrbisPkg's PkgTool (MIT) at run time. The third-party pieces keep their own licenses.
