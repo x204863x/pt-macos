@@ -1,3 +1,5 @@
+> Windows and Linux only. On macOS use the app from the Releases page and `tools/macos/extract-pkg.sh`: see macos.md.
+
 # Installer
 
 The release is an installer that builds a working P.T. folder from the player's own copy of the game. It ships the PC
