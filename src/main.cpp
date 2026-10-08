@@ -596,12 +596,18 @@ struct App {
     pt::LiveSplitClient livesplit;
 };
 
+std::filesystem::path UserDataDir();
+
 void MountMods(App& app) {
     const Options& options = app.options;
     if (options.no_mods || (options.headless && options.mods_dir.empty())) {
         return;
     }
-    const std::filesystem::path dir = options.mods_dir.empty() ? pt::ExecutableDir() / "mods" : options.mods_dir;
+    std::filesystem::path dir = options.mods_dir.empty() ? pt::ExecutableDir() / "mods" : options.mods_dir;
+#ifdef __APPLE__
+    // inside an app bundle the folder next to the program is read-only territory: mods live in the user's data folder
+    if (options.mods_dir.empty()) dir = UserDataDir() / "mods";
+#endif
     std::error_code ec;
     if (!std::filesystem::is_directory(dir, ec)) {
         if (!options.mods_dir.empty()) {
@@ -686,6 +692,65 @@ std::filesystem::path RememberedGameDirFile() {
     return user.empty() ? std::filesystem::path() : user / "game_dir.txt";
 }
 
+bool HasAllGameFiles(const std::filesystem::path& dir) {
+    std::error_code error;
+    return LooksLikeGameDir(dir) && std::filesystem::exists(dir / "pathid_list_ps4.bin", error);
+}
+
+void RememberGameDir(const std::filesystem::path& picked) {
+    const std::filesystem::path remembered_file = RememberedGameDirFile();
+    if (remembered_file.empty()) return;
+    std::ofstream out(remembered_file, std::ios::binary | std::ios::trunc);
+    const std::u8string text = picked.u8string();
+    out.write(reinterpret_cast<const char*>(text.data()), static_cast<std::streamsize>(text.size()));
+}
+
+#ifdef __APPLE__
+/* First start without game data: SDL's folder dialog (a native NSOpenPanel). It is asynchronous, so the events are pumped until the
+   callback has run. A folder without the three files is refused with a message and the dialog opens again; Cancel gives up. */
+std::filesystem::path PickGameDirWithDialog() {
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) return {};
+    struct Result {
+        bool done = false;
+        std::string path;
+    };
+    std::filesystem::path picked;
+    for (;;) {
+        Result result;
+        SDL_PropertiesID props = SDL_CreateProperties();
+        SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING,
+                              "P.T.: select the folder with chunk1.psarc, texture.qar and pathid_list_ps4.bin (your CUSA01127 dump)");
+        SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, false);
+        SDL_ShowFileDialogWithProperties(
+            SDL_FILEDIALOG_OPENFOLDER,
+            [](void* user, const char* const* list, int) {
+                auto* r = static_cast<Result*>(user);
+                if (list && list[0]) r->path = list[0];
+                r->done = true;
+            },
+            &result, props);
+        SDL_DestroyProperties(props);
+        bool quit = false;
+        while (!result.done && !quit) {
+            SDL_Event event;
+            if (SDL_WaitEventTimeout(&event, 100) && event.type == SDL_EVENT_QUIT) quit = true;  // Cmd-Q while the dialog is open
+        }
+        if (quit || result.path.empty()) break;
+        const std::filesystem::path candidate(reinterpret_cast<const char8_t*>(result.path.c_str()));
+        if (HasAllGameFiles(candidate)) {
+            picked = candidate;
+            break;
+        }
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "P.T.",
+                                 "That folder does not contain chunk1.psarc, texture.qar and pathid_list_ps4.bin.\n\n"
+                                 "Extract your own PT.pkg first (see INSTALL-macOS.md) and choose the folder that holds these files.",
+                                 nullptr);
+    }
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    return picked;
+}
+#endif
+
 std::filesystem::path FindGameDir(const Options& options) {
     if (options.game_dir_given || LooksLikeGameDir(options.game_dir)) {
         return options.game_dir;
@@ -706,6 +771,16 @@ std::filesystem::path FindGameDir(const Options& options) {
         dir = dir.parent_path();
     }
     const std::filesystem::path remembered_file = RememberedGameDirFile();
+#ifdef __APPLE__
+    {
+        std::filesystem::path user = UserDataDir();  // .../pt-port/pt/
+        if (!user.empty() && user.filename().empty()) user = user.parent_path();
+        if (!user.empty()) {
+            const std::filesystem::path standard = user.parent_path() / "game" / "CUSA01127";
+            if (LooksLikeGameDir(standard)) return standard;
+        }
+    }
+#endif
     if (!remembered_file.empty()) {
         std::ifstream in(remembered_file, std::ios::binary);
         std::string line;
@@ -743,6 +818,15 @@ std::filesystem::path FindGameDir(const Options& options) {
                 const std::u8string text = picked.u8string();
                 out.write(reinterpret_cast<const char*>(text.data()), static_cast<std::streamsize>(text.size()));
             }
+            return picked;
+        }
+    }
+#endif
+#ifdef __APPLE__
+    if (!options.headless) {
+        const std::filesystem::path picked = PickGameDirWithDialog();
+        if (!picked.empty()) {
+            RememberGameDir(picked);
             return picked;
         }
     }
@@ -2347,12 +2431,7 @@ private:
             if (!std::filesystem::exists(dir / std::format("{}.png", e->id), ec)) missing = true;
         }
         if (!missing) return;
-        const auto exe = std::filesystem::path(SDL_GetBasePath()) /
-#ifdef _WIN32
-            "pt.exe";
-#else
-            "pt";
-#endif
+        const auto exe = pt::SelfExecutablePath();
         std::vector<std::string> args{exe.string(), "--game", app_.options.game_dir.string(), "--make-museum-previews", dir.string(),
             "--log", (dir / "capture.log").string()};
         std::vector<const char*> argv;
@@ -2488,12 +2567,7 @@ private:
         if (missing.empty()) return;
         std::ofstream(dir / "capture.txt") << LoopPreviewRoute(dir, missing);
         pt::SaveAppSettings(dir / "preview.ini", pt::AppSettings{});
-        const auto exe = std::filesystem::path(SDL_GetBasePath()) /
-#ifdef _WIN32
-            "pt.exe";
-#else
-            "pt";
-#endif
+        const auto exe = pt::SelfExecutablePath();
         std::vector<std::string> args{exe.string(), "--headless", "--no-save", "--audio-offline", "--game", app_.options.game_dir.string(),
             "--frames", "120000", "--demo-rate", "20", "--street-offer", "never", "--seed", std::to_string(kLoopPreviewSeed),
             "--bug-screen", std::to_string(kLoopPreviewBugScreen), "--f160-light", std::to_string(kLoopPreviewF160Roll), "--shot-warmup", "30", "--shot-settle", "--width", "640", "--height", "360", "--input-script", (dir/"capture.txt").string(),
