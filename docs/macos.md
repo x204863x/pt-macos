@@ -130,8 +130,8 @@ shadow on the ajar door is a real shadow of the light above (`shadow_quality = 0
 
 ## Testing the first-start folder dialog
 
-`tools/macos/test-folder-dialog.sh run` hides `game_dir.txt` and the default data folder for one launch of `dist/macos/P.T..app`, waits
-for the app to quit, then restores both (`pt.log` is kept as evidence in `$TMPDIR/pt-dialog-test/last-run.log`). Saves, settings and your
+`tools/macos/test-folder-dialog.sh run` hides `game_dir.txt` and renames the default data folder (`pt-port/game` to `pt-port/game.moved-by-dialog-test`) for one launch of `dist/macos/P.T..app`, waits
+for the app to quit, then restores both (`pt.log` is kept as evidence in `~/Library/Application Support/pt-port/.dialog-test-backup/last-run.log`). Saves, settings and your
 own game folder are never moved. Steps: (1) run it, an information box appears: OK; the folder dialog opens; choose a wrong folder (e.g.
 Documents): expect an error box and the dialog again. (2) Choose the folder with the three game files: the game starts; quit it.
 `report` then shows the `game_dir.txt` it would have written and the log lines. (3) Run it again and press Cancel: expect the

@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SUP="$HOME/Library/Application Support/pt-port"
 USERDIR="$SUP/pt"
-STATE="${TMPDIR:-/tmp}/pt-dialog-test"
+STATE="$SUP/.dialog-test-backup"
 mkdir -p "$STATE"
 
 restore() {
@@ -60,6 +60,7 @@ case "${1:-}" in
     echo "launching $APP ... (this command returns when you quit the app or the dialog's Cancel ends it)"
     open -n -W "$APP"
     for f in "$STATE"/settings-before/*; do
+      [ -e "$f" ] || continue
       cmp -s "$f" "$USERDIR/$(basename "$f")" || echo "NOTE: $(basename "$f") changed during the run (a copy from before is in $STATE/settings-before)"
     done
     ;;

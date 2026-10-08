@@ -706,8 +706,8 @@ void RememberGameDir(const std::filesystem::path& picked) {
 }
 
 #ifdef __APPLE__
-/* First start without game data: SDL's folder dialog (a native NSOpenPanel). It is asynchronous, so the events are pumped until the
-   callback has run. A folder without the three files is refused with a message and the dialog opens again; Cancel gives up. */
+/* First start without game data: SDL's folder dialog (a native NSOpenPanel). The result arrives in a callback that SDL runs from its event
+   loop, so events are pumped until it has run. A folder without the three files is refused with a message and the dialog opens again; Cancel gives up. */
 std::filesystem::path PickGameDirWithDialog() {
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) return {};
     struct Result {
