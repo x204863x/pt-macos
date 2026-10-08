@@ -48,7 +48,7 @@ Layout (real files, no symlinks):
     P.T..app/Contents/MacOS/pt                the game (also the preview helper process: it is started by its own path)
     P.T..app/Contents/Frameworks/libMoltenVK.dylib   MoltenVK 1.4.2, official Khronos release, arm64 slice, pinned by version + SHA-256
     P.T..app/Contents/Resources/{shaders,fonts,voice,licenses}   SPIR-V, fonts, whisper runtime and models, licenses
-                                              (including MoltenVK's Apache-2.0 text, this project's MIT license, and the license of every statically linked or bundled dependency: SDL3, zlib, volk, VMA, glm, Dear ImGui, stb, Lua, libogg, libvorbis, HarfBuzz, bc7enc, whisper.cpp; `package.py` fails if one is missing)
+                                              (including MoltenVK's Apache-2.0 text, this project's MIT license, and the license of every statically linked or bundled dependency: SDL3, zlib, volk, VMA, glm, Dear ImGui, stb, Lua, libogg, libvorbis, HarfBuzz, bc7enc, whisper.cpp, the ww2ogg codebook library; `package.py` fails if one is missing)
 
 The script refuses a non-Release build, checks that every Mach-O has minos <= 14.0 and depends only on system libraries or the bundle,
 signs the libraries and the bundle ad hoc, and runs `codesign --verify --deep --strict`. There is no icon (the default one): an icon
@@ -136,6 +136,13 @@ own game folder are never moved. Steps: (1) run it, an information box appears: 
 Documents): expect an error box and the dialog again. (2) Choose the folder with the three game files: the game starts; quit it.
 `report` then shows the `game_dir.txt` it would have written and the log lines. (3) Run it again and press Cancel: expect the
 "game files were not found" box (macOS wording, pointing to INSTALL-macOS.md) and the app exits. If a run is interrupted, run `restore`.
+
+## Where tests write
+
+`--headless` never writes saves, and `tools/walkthrough.py` passes `--no-save` (or `--save-dir <work folder>` for the scenarios that need a save) and runs in a
+temporary work folder with its own log and settings, so neither touches `~/Library/Application Support/pt-port/pt/`. A normal (windowed)
+launch does: `pt.ini`, `pt.log` and the save slots go there, also in a test launch. For tests that open a window,
+pass `--no-save --settings <temp>/pt.ini --log <temp>/pt.log`. `pt_save_*_test` take a not-yet-existing scratch folder.
 
 ## Checks
 

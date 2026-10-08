@@ -56,6 +56,7 @@ case "${1:-}" in
     cp -p "$USERDIR"/pt.ini "$USERDIR"/PT_Save_Data* "$STATE/settings-before/" 2>/dev/null || true
     rm -f "$USERDIR/game_dir.txt"
     [ -d "$SUP/game" ] && mv "$SUP/game" "$SUP/game.moved-by-dialog-test"
+    echo "NOTE: if you play during this test, the game writes its save into the real $USERDIR (the script restores only game_dir.txt and pt.log, never saves or settings)."
     echo "launching $APP ... (this command returns when you quit the app or the dialog's Cancel ends it)"
     open -n -W "$APP"
     for f in "$STATE"/settings-before/*; do

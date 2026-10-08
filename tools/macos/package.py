@@ -85,6 +85,27 @@ NOTICES = {
 }
 
 
+# The Wwise Vorbis codebook library compiled into pt (cmake/Dependencies.cmake) comes from hcs64/ww2ogg; its COPYING (BSD-3, Xiph.org
+# and Adam Gashlin) is fetched at the same pinned commit and checked by SHA-256. The aoTuV 6.03 codebook data is Xiph-derived and
+# covered by that same notice.
+WW2OGG_COMMIT = "14ed9b0dd62e815a38702b5f03c57006cbe2501b"
+WW2OGG_COPYING_URL = f"https://raw.githubusercontent.com/hcs64/ww2ogg/{WW2OGG_COMMIT}/COPYING"
+WW2OGG_COPYING_SHA256 = "0a12f3490863fa01539f500fc74a0e8efbfeb22852aac087c645fbd7362d6726"
+
+
+def fetch_ww2ogg_notice(cache, dest):
+    cache.mkdir(parents=True, exist_ok=True)
+    f = cache / f"ww2ogg-COPYING-{WW2OGG_COMMIT[:8]}"
+    if not f.exists() or sha256(f) != WW2OGG_COPYING_SHA256:
+        urllib.request.urlretrieve(WW2OGG_COPYING_URL, f)
+    if sha256(f) != WW2OGG_COPYING_SHA256:
+        sys.exit("ww2ogg COPYING checksum mismatch, refusing to use it")
+    shutil.copy2(f, dest / "ww2ogg-codebooks-BSD-3.txt")
+    (dest / "README-ww2ogg-codebooks.txt").write_text(
+        "packed_codebooks_aoTuV_603.bin (Wwise Vorbis codebook library, aoTuV 6.03 data) comes from https://github.com/hcs64/ww2ogg "
+        f"(commit {WW2OGG_COMMIT}) and is compiled into the executable. Its license is ww2ogg-codebooks-BSD-3.txt.\n")
+
+
 def copy_notices(build, dest):
     missing = []
     for name, (folder, file) in NOTICES.items():
@@ -141,6 +162,9 @@ def main():
     copy_tree(build / "voice", res / "voice")
     copy_tree(build / "licenses", res / "licenses")
     copy_notices(build, res / "licenses")
+    fetch_ww2ogg_notice(build / "_package_cache", res / "licenses")
+    if not (res / "licenses/ww2ogg-codebooks-BSD-3.txt").is_file():
+        sys.exit("ww2ogg notice missing")
     shutil.copy2(mvk_license, res / "licenses/MoltenVK-Apache-2.0.txt")
     shutil.copy2(ROOT / "LICENSE", res / "licenses/pt-port-LICENSE.txt")
     (res / "licenses/README-MoltenVK.txt").write_text(
