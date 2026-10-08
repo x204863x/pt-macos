@@ -6,13 +6,16 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <string>
+#include <vector>
 #ifdef __APPLE__
 #include <dlfcn.h>
 #endif
 
 #include "engine/core/crash_report.h"
 #include "engine/core/log.h"
+#include "engine/core/resource_path.h"
 
 namespace pt {
 extern bool g_checkpoints;
@@ -21,12 +24,21 @@ extern bool g_checkpoints;
 namespace pt::vk {
 
 #ifdef __APPLE__
+/* macOS has no system Vulkan loader. In the app bundle libMoltenVK.dylib is the Vulkan library itself (it exports
+   vkGetInstanceProcAddr and is what SDL and volk need, no separate loader). Lookup order: PT_VULKAN_LIBRARY, the bundle's
+   Contents/Frameworks, beside the executable, then Homebrew (development builds). */
 std::string MacVulkanLibrary() {
     static const std::string found = [] {
         std::vector<std::string> candidates;
-        if (const char* forced = std::getenv("PT_VULKAN_LIBRARY")) candidates.push_back(forced);
-        candidates.insert(candidates.end(), {"@executable_path/libvulkan.1.dylib", "libvulkan.1.dylib", "/opt/homebrew/lib/libvulkan.1.dylib",
-            "/usr/local/lib/libvulkan.1.dylib", "/opt/homebrew/lib/libMoltenVK.dylib", "/usr/local/lib/libMoltenVK.dylib"});
+        if (const char* forced = std::getenv("PT_VULKAN_LIBRARY"); forced && *forced) candidates.push_back(forced);
+        const std::filesystem::path self = SelfExecutablePath();  // Contents/MacOS/pt inside a bundle
+        if (!self.empty()) {
+            candidates.push_back((self.parent_path().parent_path() / "Frameworks" / "libMoltenVK.dylib").string());
+            candidates.push_back((self.parent_path() / "libMoltenVK.dylib").string());
+            candidates.push_back((self.parent_path() / "libvulkan.1.dylib").string());
+        }
+        candidates.insert(candidates.end(), {"/opt/homebrew/lib/libvulkan.1.dylib", "/usr/local/lib/libvulkan.1.dylib",
+            "/opt/homebrew/lib/libMoltenVK.dylib", "/usr/local/lib/libMoltenVK.dylib"});
         for (const std::string& name : candidates) {
             if (void* module = dlopen(name.c_str(), RTLD_NOW | RTLD_LOCAL)) {
                 const bool ok = dlsym(module, "vkGetInstanceProcAddr") != nullptr;
@@ -100,7 +112,7 @@ bool HasLayer(const char* name) {
 #ifdef __APPLE__
 /* macOS has no system Vulkan loader. volk and SDL only look for libvulkan.dylib in the usual library paths, which leaves out
    Homebrew's /opt/homebrew/lib (and Finder launches get no DYLD_LIBRARY_PATH), so the loader is opened here by path:
-   PT_VULKAN_LIBRARY, a copy beside the executable, Homebrew's loader, then MoltenVK itself (it exports the same entry point). */
+   see MacVulkanLibrary. */
 PFN_vkGetInstanceProcAddr LoadMacVulkan() {
     const std::string name = MacVulkanLibrary();
     if (name.empty()) return nullptr;
@@ -116,7 +128,7 @@ bool Context::Init(SDL_Window* window, bool validation) {
     if (!loader) {
         PFN_vkGetInstanceProcAddr proc = LoadMacVulkan();
         if (!proc) {
-            LogError("vulkan: no Vulkan loader found (brew install vulkan-loader molten-vk, or set PT_VULKAN_LIBRARY)");
+            LogError("vulkan: no Vulkan loader found (libMoltenVK.dylib is missing from the app bundle; for a development build: brew install molten-vk, or set PT_VULKAN_LIBRARY)");
             return false;
         }
         volkInitializeCustom(proc);
