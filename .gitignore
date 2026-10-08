@@ -41,6 +41,4 @@ installer/*/obj/
 
 # macOS packaging output
 /dist/
-*.zip
-SHA256SUMS.txt
 .DS_Store

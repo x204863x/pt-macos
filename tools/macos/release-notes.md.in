@@ -1,0 +1,16 @@
+Native Apple Silicon build of P.T. for PC (v1.0.1, release @VERSION@), running on Metal through MoltenVK @MOLTENVK@ (bundled). The original port is by LoreanXavier (MIT); this is a private macOS port of it.
+
+**Requirements**: Apple Silicon Mac, macOS 14 or newer (tested on macOS 26 only), your own copy of the game (PT.pkg, CUSA01127). No game data is included.
+
+**Install**
+1. Unzip `P.T.-macOS-arm64-@VERSION@.zip`, move `P.T..app` to Applications.
+2. The app is ad-hoc signed and not notarized: open it once, then System Settings > Privacy & Security > Open Anyway.
+3. Game files: run `tools/macos/extract-pkg.sh /path/to/PT.pkg` from the repository (needs Rosetta; it also applies the game's icon from your own PKG, locally), or choose a folder with `chunk1.psarc`, `texture.qar`, `pathid_list_ps4.bin` in the dialog shown at first start.
+4. Allow the microphone when asked (voice scene).
+Details: INSTALL-macOS.md and docs/macos.md.
+
+**Off or different on Mac**: no ray tracing (MoltenVK), no FSR/DLSS/XeSS/frame generation/OpenXR, enhanced textures unavailable, voice recognition on CPU, mods in `~/Library/Application Support/pt-port/pt/mods`. Includes a fix for speckled/dark lighting under MoltenVK. Known limitation: while the first-start folder dialog is open, Cmd-Q does not close the app (use Cancel).
+
+**Credits**: original port LoreanXavier/pt-pc (MIT); MoltenVK, Khronos Group (Apache-2.0); LibOrbisPkg PkgTool (MIT) for the extraction helper; whisper.cpp (MIT); other notices in the app's Contents/Resources/licenses.
+
+SHA-256 of the zip: see SHA256SUMS.txt.

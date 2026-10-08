@@ -116,7 +116,7 @@ reverse engineering the game data, with the tools in tools/ that read those form
 
 ## macOS (Apple silicon)
 
-A native arm64 build runs on macOS 14 or newer through MoltenVK. This repository's fork publishes a self-contained, ad-hoc signed app
+A native arm64 build runs on macOS 14 or newer through MoltenVK. This fork publishes a self-contained, ad-hoc signed app
 as a GitHub release; you bring your own game files. Install, build from source, packaging and what is off: docs/macos.md.
 
 ## Thanks
@@ -126,9 +126,9 @@ connected to either of them. It contains none of their assets and does nothing w
 
 The port is built on SDL3, Vulkan (volk, VMA), glm, Dear ImGui, stb, Lua 5.1, libogg and libvorbis, whisper.cpp with
 OpenAI's Whisper model and the Silero VAD for the voice part, Real-ESRGAN with ncnn for the enhanced textures, AMD
-FidelityFX, NVIDIA DLSS and Intel XeSS for the upscalers, the Khronos OpenXR loader for VR, HarfBuzz on Linux and the
+FidelityFX, NVIDIA DLSS and Intel XeSS for the upscalers, the Khronos OpenXR loader for VR, HarfBuzz on Linux and macOS and the
 Noto fonts for the added languages, and LibOrbisPkg in the installer. Their notices ship in `licenses/` next to the
-executable.
+executable (in the macOS app: `Contents/Resources/licenses/`, which also holds MoltenVK's Apache-2.0 text).
 
 ## License
 

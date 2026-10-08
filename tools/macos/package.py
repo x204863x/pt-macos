@@ -66,6 +66,37 @@ def fetch_moltenvk(cache):
     return extract / MOLTENVK_DYLIB, extract / MOLTENVK_LICENSE
 
 
+# Notices of everything linked into the executable (statically) or shipped beside it: name -> (folder under _deps, license file).
+# Packaging fails when one is missing, so a dependency can never ship without its notice.
+NOTICES = {
+    "SDL3-zlib": ("sdl3-src", "LICENSE.txt"),
+    "zlib": ("zlib-src", "LICENSE"),
+    "volk-MIT": ("volk-src", "LICENSE.md"),
+    "VulkanMemoryAllocator-MIT": ("vma-src", "LICENSE.txt"),
+    "glm-MIT": ("glm-src", "copying.txt"),
+    "DearImGui-MIT": ("imgui-src", "LICENSE.txt"),
+    "stb-MIT-or-public-domain": ("stb-src", "LICENSE"),
+    "Lua-5.1-MIT": ("lua51-src", "COPYRIGHT"),
+    "libogg-BSD-3": ("ogg-src", "COPYING"),
+    "libvorbis-BSD-3": ("vorbis-src", "COPYING"),
+    "HarfBuzz-MIT": ("harfbuzz-src", "COPYING"),
+    "bc7enc": ("bc7enc-src", "LICENSE"),
+    "whisper.cpp-MIT": ("whisper-src", "LICENSE"),
+}
+
+
+def copy_notices(build, dest):
+    missing = []
+    for name, (folder, file) in NOTICES.items():
+        src = build / "_deps" / folder / file
+        if src.is_file():
+            shutil.copy2(src, dest / f"{name}.txt")
+        else:
+            missing.append(str(src))
+    if missing:
+        sys.exit("missing third-party license notices (is the build dir complete?):\n  " + "\n  ".join(missing))
+
+
 def copy_tree(src, dst, keep=lambda p: True):
     for p in sorted(src.rglob("*")):
         rel = p.relative_to(src)
@@ -109,6 +140,7 @@ def main():
     copy_tree(build / "fonts", res / "fonts")
     copy_tree(build / "voice", res / "voice")
     copy_tree(build / "licenses", res / "licenses")
+    copy_notices(build, res / "licenses")
     shutil.copy2(mvk_license, res / "licenses/MoltenVK-Apache-2.0.txt")
     shutil.copy2(ROOT / "LICENSE", res / "licenses/pt-port-LICENSE.txt")
     (res / "licenses/README-MoltenVK.txt").write_text(
@@ -163,6 +195,8 @@ def main():
     zip_path.unlink(missing_ok=True)
     run("ditto", "-c", "-k", "--keepParent", "--norsrc", "--noextattr", "--noqtn", app, zip_path)
     shutil.copy2(ROOT / "tools/macos/INSTALL-macOS.md", outdir / "INSTALL-macOS.md")
+    notes = (ROOT / "tools/macos/release-notes.md.in").read_text().replace("@VERSION@", release).replace("@MOLTENVK@", MOLTENVK_VERSION)
+    (outdir / "release-notes.md").write_text(notes)
     (outdir / "SHA256SUMS.txt").write_text(f"{sha256(zip_path)}  {zip_path.name}\n")
     print(f"{zip_path}\n{sha256(zip_path)}")
 

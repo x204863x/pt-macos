@@ -16,7 +16,7 @@ FILES=(chunk1.psarc texture.qar pathid_list_ps4.bin)
 APP=""; ICON=1; FILES_TOO=1
 while [ $# -gt 0 ]; do
   case "$1" in
-    --app) APP="${2:-}"; shift 2 ;;
+    --app) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--app needs a path" >&2; exit 2; }; APP="$2"; shift 2 ;;
     --icon-only) FILES_TOO=0; shift ;;
     --no-icon) ICON=0; shift ;;
     *) break ;;
@@ -70,7 +70,7 @@ if [ "$ICON" = 1 ]; then
     echo "no P.T..app found, skipping the icon (use --app <path>)"
     exit 0
   fi
-  ID="$("$TMP/tool/PkgTool.Core" pkg_listentries "$PKG" | awk '$NF=="ICON0_PNG"{print $4; exit}')"
+  ID="$("$TMP/tool/PkgTool.Core" pkg_listentries "$PKG" | awk '$NF=="ICON0_PNG" && !found {print $4; found=1}')"
   if [ -z "$ID" ]; then echo "no ICON0_PNG entry in the PKG, skipping the icon" >&2; exit 0; fi
   "$TMP/tool/PkgTool.Core" pkg_extractentry "$PKG" "$ID" "$TMP/icon0.png"
   mkdir "$TMP/PT.iconset"

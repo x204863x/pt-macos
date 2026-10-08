@@ -715,6 +715,12 @@ std::filesystem::path PickGameDirWithDialog() {
         std::string path;
     };
     std::filesystem::path picked;
+    // NSOpenPanel does not show the dialog title on current macOS, so say what to choose first
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "P.T.",
+                             "P.T. needs the game files from your own copy of the game.\n\nNext, choose the folder that contains "
+                             "chunk1.psarc, texture.qar and pathid_list_ps4.bin (extract them from your PT.pkg with "
+                             "tools/macos/extract-pkg.sh, see INSTALL-macOS.md).\n\nThe choice is remembered.",
+                             nullptr);
     for (;;) {
         Result result;
         SDL_PropertiesID props = SDL_CreateProperties();
@@ -4449,10 +4455,16 @@ int main(int argc, char** argv) {
     }
     if (!vfs.Mount(game_dir)) {
         if (!options.headless) {
+#ifdef __APPLE__
+            const std::string text = "The P.T. game files were not found in\n" + std::filesystem::absolute(game_dir).string() +
+                                     "\n\nRun tools/macos/extract-pkg.sh on your own PT.pkg (see INSTALL-macOS.md), or start the game again and choose "
+                                     "the folder that holds chunk1.psarc, texture.qar and pathid_list_ps4.bin.";
+#else
             const std::string text = "The P.T. game files were not found in\n" + std::filesystem::absolute(game_dir).string() +
                                      "\n\nStart pt.exe with --game <folder>, where the folder is your extracted CUSA01127 package "
                                      "(it contains chunk1.psarc and texture.qar), or put that folder at game\\CUSA01127 next to the "
                                      "working directory.";
+#endif
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "P.T.", text.c_str(), nullptr);
         }
         return 1;

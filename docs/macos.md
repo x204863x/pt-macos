@@ -48,7 +48,7 @@ Layout (real files, no symlinks):
     P.T..app/Contents/MacOS/pt                the game (also the preview helper process: it is started by its own path)
     P.T..app/Contents/Frameworks/libMoltenVK.dylib   MoltenVK 1.4.2, official Khronos release, arm64 slice, pinned by version + SHA-256
     P.T..app/Contents/Resources/{shaders,fonts,voice,licenses}   SPIR-V, fonts, whisper runtime and models, licenses
-                                              (including MoltenVK's Apache-2.0 text and this project's MIT license)
+                                              (including MoltenVK's Apache-2.0 text, this project's MIT license, and the license of every statically linked or bundled dependency: SDL3, zlib, volk, VMA, glm, Dear ImGui, stb, Lua, libogg, libvorbis, HarfBuzz, bc7enc, whisper.cpp; `package.py` fails if one is missing)
 
 The script refuses a non-Release build, checks that every Mach-O has minos <= 14.0 and depends only on system libraries or the bundle,
 signs the libraries and the bundle ad hoc, and runs `codesign --verify --deep --strict`. There is no icon (the default one): an icon
@@ -93,10 +93,10 @@ Everything is behind `__APPLE__` / `if(APPLE)`; Windows and Linux are unchanged 
 | `src/engine/core/resource_path.{h,cpp}` | `SelfExecutablePath()` (`_NSGetExecutablePath`): the museum and loop preview helper processes are started by the executable's own path, because `SDL_GetBasePath()` is `Contents/Resources` in a bundle. |
 | `src/main.cpp` | `FindGameDir`: `~/Library/Application Support/pt-port/game/CUSA01127` and an SDL folder dialog; mods read from the user data folder. |
 | `src/engine/anim/anim_test.cpp` | floating-point `std::from_chars` needs macOS 26's libc++; `strtod` is used on Apple (deployment target 14). |
+| `src/engine/core/resource_path.cpp` (all platforms) | intentional behaviour change on Windows/Linux: the helper process path is now built with `ExecutableDir() / "pt(.exe)"` inside `SelfExecutablePath()` where `main.cpp` used `std::filesystem::path(SDL_GetBasePath()) / ...`; the base path is now converted as UTF-8 (`ExecutableDir()`), so non-ASCII install folders work for the previews. |
 | `CMakeLists.txt` | deployment target 14.0, arm64. |
 
-Related prior work (MIT) that solved the same packaging problems: the upstream pull request LoreanXavier/pt-pc#4 and the
-`macos-arm64-preview-2` branch of ignusloki/pt-pc. This implementation was written independently; no code was copied from them.
+Related prior work (MIT): the upstream pull request LoreanXavier/pt-pc#4 and the `macos-arm64-preview-2` branch of ignusloki/pt-pc. This implementation was written independently; no code was copied from them.
 
 ## Lighting fix: speckled floors and walls, dark rooms
 
@@ -127,6 +127,15 @@ shadow on the ajar door is a real shadow of the light above (`shadow_quality = 0
 `graphics.texture_detail` is a mip bias on every material texture sample (+1 reduced, 0 original, -0.5 fine).
 `pt_reflection_mix_test` fails one case ("blend both reflection sources": the shader computes (0.667, 0.333, 0, 0.3), the test expects
 (0.8, 0.2, 0, 0.5)); it fails the same before and after, and was not checked on another platform.
+
+## Testing the first-start folder dialog
+
+`tools/macos/test-folder-dialog.sh run` hides `game_dir.txt` and the default data folder for one launch of `dist/macos/P.T..app`, waits
+for the app to quit, then restores both (`pt.log` is kept as evidence in `$TMPDIR/pt-dialog-test/last-run.log`). Saves, settings and your
+own game folder are never moved. Steps: (1) run it, an information box appears: OK; the folder dialog opens; choose a wrong folder (e.g.
+Documents): expect an error box and the dialog again. (2) Choose the folder with the three game files: the game starts; quit it.
+`report` then shows the `game_dir.txt` it would have written and the log lines. (3) Run it again and press Cancel: expect the
+"game files were not found" box (macOS wording, pointing to INSTALL-macOS.md) and the app exits. If a run is interrupted, run `restore`.
 
 ## Checks
 
