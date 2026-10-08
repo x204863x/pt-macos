@@ -13,6 +13,9 @@ Nothing from the game is included in this download.
      `~/Library/Application Support/pt-port/game/CUSA01127`, where the app looks first. Or
    - dump the PKG yourself with any tool and, at the first start, choose the folder that holds the three files in the
      dialog the app shows. The choice is remembered.
+   The same helper also gives the installed app P.T.'s icon, taken from your own PKG and applied only on your Mac (the app is
+   re-signed ad hoc); this download has the default icon. Use `--app <path>` if the app is not in /Applications or
+   ~/Applications, `--no-icon` to skip it, or `--icon-only` to apply just the icon.
 4. The microphone prompt appears when the voice scene needs it. Allowing it is optional; without it voice recognition does not work.
 
 Settings, saves and the log are in `~/Library/Application Support/pt-port/pt/`. Mods go to `~/Library/Application Support/pt-port/pt/mods/`.

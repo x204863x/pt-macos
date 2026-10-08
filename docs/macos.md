@@ -12,7 +12,9 @@ Short version, in `INSTALL-macOS.md` (also attached to each release):
 3. Get the game files from your own PT.pkg: `tools/macos/extract-pkg.sh /path/to/PT.pkg` puts `chunk1.psarc`, `texture.qar`
    and `pathid_list_ps4.bin` in `~/Library/Application Support/pt-port/game/CUSA01127`. The helper downloads LibOrbisPkg's
    `PkgTool.Core` (osx-x64 0.2.231, pinned by SHA-256, needs Rosetta), runs `pkg_extract` without a passcode, copies only those
-   three files and removes its temporary files. It only reads the PKG. Nothing from the game is in this repository or the release.
+   three files and removes its temporary files. It only reads the PKG. It also applies the game's icon (the PKG's ICON0_PNG entry,
+   located through the entry table) to the installed app (`--app <path>`, else /Applications or ~/Applications; `--no-icon`,
+   `--icon-only`), converting it to PT.icns locally and re-signing ad hoc; the release itself carries no icon. Nothing from the game is in this repository or the release.
 4. Start the app. Where it looks for the game, in order: `--game <folder>`; `game/CUSA01127` or `CUSA01127` next to the app
    (up to five folders up); `~/Library/Application Support/pt-port/game/CUSA01127`; the folder remembered in
    `~/Library/Application Support/pt-port/pt/game_dir.txt`. If none is found, a folder dialog opens; the folder must hold the
