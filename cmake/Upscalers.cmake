@@ -208,3 +208,11 @@ if(PT_UPSCALERS)
     endif()
   endif()
 endif()
+
+if(APPLE)
+  # Apple MetalFX (src/engine/render/upscale/metalfx_backend.mm): Objective-C++ with ARC, system frameworks only, nothing to download.
+  # Compiled as C++ with -x objective-c++ (the project does not enable the OBJCXX language, see GGML_METAL in cmake/Dependencies.cmake)
+  target_sources(pt_engine PRIVATE src/engine/render/upscale/metalfx_backend.mm)
+  set_source_files_properties(src/engine/render/upscale/metalfx_backend.mm PROPERTIES LANGUAGE CXX COMPILE_OPTIONS "-x;objective-c++;-fobjc-arc")
+  target_link_libraries(pt_engine PUBLIC "-framework Metal" "-framework MetalFX" "-framework Foundation")
+endif()

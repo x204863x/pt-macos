@@ -47,7 +47,14 @@ public:
     bool SaveScreenshot(const std::filesystem::path& path);
 
     vk::Context& Context() { return ctx_; }
-    VkCommandBuffer Cmd() const { return frames_[frame_index_].cmd; }
+    VkCommandBuffer Cmd() const { return frames_[frame_index_].split ? frames_[frame_index_].cmd_post : frames_[frame_index_].cmd; }
+    /* Splits the frame's submission for an upscaler that works outside Vulkan (MetalFX). Ends and submits the commands recorded so far,
+       signalling `timeline` = `before`; `between` then encodes the outside work, which must wait for `before` and bring `timeline` to
+       `after`; recording goes on in a second command buffer (Cmd() returns it) that EndFrame submits behind a wait for `after`. The swapchain
+       acquire wait, the present signal and the in-flight fence stay on that last submit. If the first submit fails `between` is not run and the host signals `after`, so the frame
+       still completes, but everything the first submit held is dropped, so that frame shows stale content (the caller finds that its
+       outside work did not run). False, nothing done, if the frame is already split. */
+    bool SplitFrame(VkSemaphore timeline, uint64_t before, uint64_t after, const std::function<void()>& between);
     const vk::Image& SceneColor() const { return scene_color_; }
     VkExtent2D RenderExtent() const { return {scene_color_.extent.width, scene_color_.extent.height}; }
     uint32_t FrameIndex() const { return frame_index_; }
@@ -72,6 +79,10 @@ private:
     struct Frame {
         VkCommandPool pool = VK_NULL_HANDLE;
         VkCommandBuffer cmd = VK_NULL_HANDLE;
+        VkCommandBuffer cmd_post = VK_NULL_HANDLE;
+        bool split = false;
+        VkSemaphore split_timeline = VK_NULL_HANDLE;
+        uint64_t split_value = 0;
         VkSemaphore image_available = VK_NULL_HANDLE;
         VkFence in_flight = VK_NULL_HANDLE;
     };

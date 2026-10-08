@@ -1,4 +1,7 @@
 #include "engine/render/vk_context.h"
+#ifdef __APPLE__
+#include <vulkan/vulkan_metal.h>
+#endif
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -193,6 +196,7 @@ bool Context::Init(SDL_Window* window, bool validation) {
     }
     volkLoadInstance(instance);
 
+    validation_enabled = validation;
     if (validation) {
         VkDebugUtilsMessengerCreateInfoEXT messenger_info{VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
         messenger_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -633,8 +637,17 @@ VkResult Context::QueuePresent(const VkPresentInfoKHR& info) {
 }
 
 bool Context::CreateImage(Image& out, VkFormat format, VkExtent3D extent, VkImageUsageFlags usage, uint32_t mip_levels,
-                          uint32_t layers, VkImageAspectFlags aspect, bool cube) {
+                          uint32_t layers, VkImageAspectFlags aspect, bool cube, bool export_metal) {
     VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+#ifdef __APPLE__
+    VkExportMetalObjectCreateInfoEXT export_info{VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECT_CREATE_INFO_EXT};
+    export_info.exportObjectType = VK_EXPORT_METAL_OBJECT_TYPE_METAL_TEXTURE_BIT_EXT;
+    if (export_metal && metal_objects) {
+        info.pNext = &export_info;
+    }
+#else
+    (void)export_metal;
+#endif
     info.imageType = extent.depth > 1 ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D;
     info.format = format;
     info.extent = extent;

@@ -11,11 +11,15 @@
 
 #include "engine/render/vk_context.h"
 
+#ifdef __APPLE__
+#include <vulkan/vulkan_metal.h>
+#endif
+
 namespace pt {
 
 class FrameGeneration;
 
-enum class UpscalerKind : int { Off = 0, Fsr = 1, Dlss = 2, Xess = 3, Spatial = 4, Fsr4 = 5, Count = 6 };
+enum class UpscalerKind : int { Off = 0, Fsr = 1, Dlss = 2, Xess = 3, Spatial = 4, Fsr4 = 5, MetalFx = 6, Count = 7 };
 enum class DlssModel : int { Auto = 0, K = 1, L = 2, M = 3, Count = 4 };
 enum class FrameGenKind : int { Off = 0, Fsr = 1, Dlss = 2, Count = 3 };
 enum class UpscaleQuality : int { NativeAA = 0, Quality = 1, Balanced = 2, Performance = 3, UltraPerformance = 4, Custom = 5, Count = 6 };
@@ -117,6 +121,14 @@ public:
     virtual bool Dispatch(const UpscaleDispatch& dispatch) = 0;
     virtual void Release() = 0;
     virtual float MipBias(float render_over_display) const;
+    /* Backends that work outside the Vulkan command buffer (MetalFX) split the frame's submission: the Vulkan work before the upscaler is
+       submitted, EncodeExternal runs, and the work after it waits on Timeline() at `signal`. */
+    virtual bool External() const { return false; }
+    virtual VkSemaphore Timeline() const { return VK_NULL_HANDLE; }
+    virtual uint64_t NextTimelineValue() { return 0; }
+    virtual bool EncodeExternal(const UpscaleDispatch&, uint64_t, uint64_t) { return false; }
+    /* The range of display/render ratios the backend can run; false when it has no limit. */
+    virtual bool RatioRange(float&, float&) const { return false; }
 };
 
 class UpscaleHost : public vk::ContextHooks {
@@ -174,6 +186,9 @@ private:
     VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT chain_mutable_{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT};
     VkPhysicalDevicePresentIdFeaturesKHR chain_present_id_{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR};
     int frame_stats_ = -1;
+#ifdef __APPLE__
+    VkExportMetalObjectCreateInfoEXT export_device_{};
+#endif
     std::chrono::steady_clock::time_point last_tick_{};
     std::vector<float> frame_intervals_;
 };
@@ -184,6 +199,7 @@ std::unique_ptr<UpscaleBackend> CreateStreamlineDlssBackend(vk::Context& ctx);
 uint32_t DlssPresetHint(DlssModel model);
 bool DlssAutoExposure();
 std::unique_ptr<UpscaleBackend> CreateXessBackend(vk::Context& ctx);
+std::unique_ptr<UpscaleBackend> CreateMetalFxBackend(vk::Context& ctx);
 void XessDeviceRequirements(bool query, VkInstance instance, VkPhysicalDevice physical, DeviceFeatureSet& out);
 void DlssInstanceExtensions(bool query, std::vector<std::string>& out);
 void DlssDeviceExtensions(bool query, VkInstance instance, VkPhysicalDevice physical, std::vector<std::string>& out);

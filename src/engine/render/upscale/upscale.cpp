@@ -24,7 +24,8 @@ struct KindInfo {
 };
 
 constexpr KindInfo kKinds[] = {{"Off", "off"},           {"AMD FSR 3", "fsr3"},          {"NVIDIA DLSS", "dlss"},
-                               {"Intel XeSS", "xess"},    {"Spatial (test)", "spatial"}, {"AMD FSR 4", "fsr4"}};
+                               {"Intel XeSS", "xess"},    {"Spatial (test)", "spatial"}, {"AMD FSR 4", "fsr4"},
+                               {"Apple MetalFX", "metalfx"}};
 
 constexpr const char* kDlssModels[] = {"auto", "k", "l", "m"};
 constexpr const char* kFrameGens[] = {"off", "fsr3", "dlss"};
@@ -56,6 +57,12 @@ float Halton(int32_t index, int32_t base) {
 }
 
 }
+
+#ifndef __APPLE__
+std::unique_ptr<UpscaleBackend> CreateMetalFxBackend(vk::Context&) {
+    return nullptr;
+}
+#endif
 
 const char* UpscalerName(UpscalerKind kind) {
     const int i = static_cast<int>(kind);
@@ -211,7 +218,16 @@ bool UpscaleHost::DeviceHas(const char* name) const {
                        [&](const VkExtensionProperties& e) { return std::strcmp(e.extensionName, name) == 0; });
 }
 
-void UpscaleHost::InstanceExtensions(VkInstanceCreateInfo&, std::vector<const char*>& extensions) {
+void UpscaleHost::InstanceExtensions(VkInstanceCreateInfo& info, std::vector<const char*>& extensions) {
+#ifdef __APPLE__
+    /* VK_EXT_metal_objects: the MTLDevice is exported (MetalFX), which the instance has to announce */
+    export_device_ = {VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECT_CREATE_INFO_EXT};
+    export_device_.exportObjectType = VK_EXPORT_METAL_OBJECT_TYPE_METAL_DEVICE_BIT_EXT;
+    export_device_.pNext = info.pNext;
+    info.pNext = &export_device_;
+#else
+    (void)info;
+#endif
     uint32_t count = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
     instance_available_.resize(count);
@@ -314,6 +330,10 @@ void UpscaleHost::DeviceSetup(VkInstance instance, VkPhysicalDevice physical, st
     vkEnumerateDeviceExtensionProperties(physical, nullptr, &count, device_available_.data());
     AddExtension(extensions, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, true);
     AddExtension(extensions, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, true);
+#ifdef __APPLE__
+    /* MetalFX encodes into a Metal command buffer on the MTLTextures behind the Vulkan images (src/engine/render/upscale/metalfx_backend.mm) */
+    AddExtension(extensions, "VK_EXT_metal_objects", true);
+#endif
     std::vector<std::string> wanted;
     DlssDeviceExtensions(startup_ == UpscalerKind::Dlss, instance, physical, wanted);
     for (const std::string& name : wanted) {
@@ -485,6 +505,9 @@ void UpscaleHost::DeviceQueues(VkPhysicalDevice physical, VkSurfaceKHR surface, 
 
 void UpscaleHost::DeviceCreated(vk::Context& ctx) {
     ctx_ = &ctx;
+#ifdef __APPLE__
+    ctx.metal_objects = Enabled("VK_EXT_metal_objects", true);
+#endif
     for (int i = 0; i < 3; ++i) {
         if (fg_family_[i] != UINT32_MAX) {
             vkGetDeviceQueue(ctx.device, fg_family_[i], fg_index_[i], &fg_queue_[i]);
@@ -707,11 +730,12 @@ bool UpscaleHost::Available(UpscalerKind kind, std::string& reason, bool probe) 
         case UpscalerKind::Fsr4: backends_[i] = CreateFsrBackend(*ctx_, 4); break;
         case UpscalerKind::Dlss: backends_[i] = streamline::Active() ? CreateStreamlineDlssBackend(*ctx_) : CreateDlssBackend(*ctx_); break;
         case UpscalerKind::Xess: backends_[i] = CreateXessBackend(*ctx_); break;
+        case UpscalerKind::MetalFx: backends_[i] = CreateMetalFxBackend(*ctx_); break;
         default: break;
         }
         if (!backends_[i]) {
             probed_[i] = true;
-            reasons_[i] = "not built into this executable";
+            reasons_[i] = kind == UpscalerKind::MetalFx ? "needs macOS" : "not built into this executable";
             LogInfo("upscale: {} unavailable: {}", UpscalerName(kind), reasons_[i]);
         }
     }

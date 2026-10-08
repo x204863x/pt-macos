@@ -70,7 +70,7 @@ public:
     VkImageLayout PresentLayout() const { return swapchain_owner_ ? swapchain_owner_->PresentLayout() : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR; }
 
     bool CreateImage(Image& out, VkFormat format, VkExtent3D extent, VkImageUsageFlags usage, uint32_t mip_levels = 1,
-                     uint32_t layers = 1, VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT, bool cube = false);
+                     uint32_t layers = 1, VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT, bool cube = false, bool export_metal = false);
     void DestroyImage(Image& image);
     bool CreateBuffer(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host_visible);
     void DestroyBuffer(Buffer& buffer);
@@ -94,6 +94,9 @@ public:
     PFN_vkGetInstanceProcAddr loader = nullptr;
     std::function<void()> before_device_destroy;
     bool force_vsync_off = false;
+    bool validation_enabled = false;
+    /* macOS: VK_EXT_metal_objects is enabled, so images that are exported to Metal (MetalFX) carry VkExportMetalObjectCreateInfoEXT */
+    bool metal_objects = false;
 
     bool want_ray_query = false;
     bool ray_query_supported = false;

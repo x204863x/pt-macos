@@ -17,8 +17,19 @@ constexpr VkFormat kMotionFormat = VK_FORMAT_R16G16_SFLOAT;
 constexpr VkFormat kReactiveFormat = VK_FORMAT_R8_UNORM;
 constexpr VkFormat kUpscaleColorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 constexpr VkFormat kPostDepthFormat = VK_FORMAT_R32_SFLOAT;
+#ifdef __APPLE__
+/* MetalFX reads the exposure from a 1x1 R16Float texture */
+constexpr VkFormat kExposureFormat = VK_FORMAT_R16_SFLOAT;
+#else
 constexpr VkFormat kExposureFormat = VK_FORMAT_R32_SFLOAT;
+#endif
 constexpr VkFormat kHandyFactorFormat = VK_FORMAT_R16_SFLOAT;
+#ifdef __APPLE__
+/* MetalFX's output texture needs the render target usage besides shader write */
+constexpr VkImageUsageFlags kUpscaledExtraUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+#else
+constexpr VkImageUsageFlags kUpscaledExtraUsage = 0;
+#endif
 constexpr float kReactiveScale = 3.0f;
 constexpr float kFlashlightReactiveGain = 1.5f;
 constexpr float kFlashlightReactiveCap = 0.3f;
@@ -142,12 +153,12 @@ void SceneRenderer::DestroyUpscalePipelines() {
 bool SceneRenderer::CreateUpscaleTargets(VkExtent2D render, VkExtent2D output) {
     const VkImageUsageFlags color = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     const VkImageAspectFlags c = VK_IMAGE_ASPECT_COLOR_BIT;
-    const bool ok = CreateTarget(motion_, kMotionFormat, render, color | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, c) && CreateTarget(reactive_, kReactiveFormat, render, color | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, c) &&
-                    CreateTarget(opaque_, kHdrTargetFormat, render, color | VK_IMAGE_USAGE_TRANSFER_DST_BIT, c) &&
+    const bool ok = CreateTarget(motion_, kMotionFormat, render, color | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, c, true) && CreateTarget(reactive_, kReactiveFormat, render, color | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, c, true) &&
+                    CreateTarget(opaque_, kHdrTargetFormat, render, color | VK_IMAGE_USAGE_TRANSFER_DST_BIT, c, true) &&
                     CreateTarget(handy_factor_, kHandyFactorFormat, render, color, c) &&
-                    CreateTarget(exposure_image_, kExposureFormat, {1, 1}, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, c) &&
+                    CreateTarget(exposure_image_, kExposureFormat, {1, 1}, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, c, true) &&
                     CreateTarget(upscaled_, kUpscaleColorFormat, output,
-                                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, c) &&
+                                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | kUpscaledExtraUsage, c, true) &&
                     CreateTarget(post_hdr_, kUpscaleColorFormat, output, color, c) && CreateTarget(post_depth_, kPostDepthFormat, output, color, c) &&
                     CreateTarget(post_object_velocity_, kUpscaleColorFormat, output, color, c);
     if (!ok) {
@@ -241,6 +252,7 @@ bool SceneRenderer::SetupUpscaler(VkExtent2D output) {
         up_.kind = UpscalerKind::Off;
         up_.failed_key.clear();
         upscale_stats_.error.clear();
+        upscale_stats_.note.clear();
         return false;
     }
     std::string reason;
@@ -248,7 +260,26 @@ bool SceneRenderer::SetupUpscaler(VkExtent2D output) {
         upscale_stats_.error = reason;
         return false;
     }
-    const VkExtent2D render = UpscaleRenderExtent(output, upscale.quality, upscale.scale);
+    VkExtent2D render = UpscaleRenderExtent(output, upscale.quality, upscale.scale);
+    std::string range_note;
+    if (kind != UpscalerKind::Spatial) {
+        float lo = 0.0f;
+        float hi = 0.0f;
+        UpscaleBackend* limited = UpscaleHost::Get().Backend(kind);
+        if (limited && limited->RatioRange(lo, hi)) {
+            const float ratio = UpscaleRatio(upscale.quality, upscale.scale);
+            const float clamped = std::clamp(ratio, lo, hi);
+            /* the rounded render size must stay inside the range too (1600 / 3 rounds to 533, a ratio of 3.002) */
+            const auto smallest = [&](uint32_t out) { return std::clamp(static_cast<uint32_t>(std::ceil(static_cast<double>(out) / hi - 1.0e-3)), 1u, out); };
+            const auto largest = [&](uint32_t out) { return std::clamp(static_cast<uint32_t>(std::floor(static_cast<double>(out) / lo + 1.0e-3)), 1u, out); };
+            render = {std::clamp(render.width, smallest(output.width), largest(output.width)),
+                      std::clamp(render.height, smallest(output.height), largest(output.height))};
+            if (std::fabs(clamped - ratio) > 1.0e-3f) {
+                range_note = std::format("{} supports render scales of {:.0f}% to {:.0f}% on this GPU; using {:.0f}%.", UpscalerName(kind),
+                                         100.0f / hi, 100.0f / lo, 100.0f / clamped);
+            }
+        }
+    }
     UpscaleSettings key_settings = upscale;
     key_settings.sharpness = 0.0f;
     key_settings.frame_generation = FrameGenKind::Off;
@@ -325,6 +356,12 @@ bool SceneRenderer::SetupUpscaler(VkExtent2D output) {
     upscale_stats_.render = render;
     upscale_stats_.output = output;
     upscale_stats_.error.clear();
+    if (upscale_stats_.note != range_note) {
+        if (!range_note.empty()) {
+            LogWarn("upscale: {}", range_note);
+        }
+        upscale_stats_.note = range_note;
+    }
     return true;
 }
 
@@ -440,22 +477,38 @@ void SceneRenderer::RecordUpscaleInputs(VkCommandBuffer cmd, const ViewSetup& vi
     vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, slot.upscale_queries, 1);
 }
 
-void SceneRenderer::RecordUpscale(VkCommandBuffer cmd, float dt) {
+void SceneRenderer::RecordUpscale(VkCommandBuffer& cmd, float dt) {
     FrameSlot& slot = slots_[renderer_->FrameIndex()];
     vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, slot.upscale_queries, 2);
     UseTargets(cmd, {{&exposure_image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}});
     VkClearColorValue value{};
+#ifdef __APPLE__
+    /* the exposure image is R16F here (MetalFX); half precision flushes below 6.1e-5 and overflows above 65504 */
+    value.float32[0] = std::clamp(exposure_, 6.2e-5f, 65000.0f);
+#else
     value.float32[0] = exposure_;
+#endif
     const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     vkCmdClearColorImage(cmd, exposure_image_.image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &value, 1, &range);
     UseTargets(cmd, {{&exposure_image_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}});
     bool upscaled = false;
     if (up_.backend) {
-        UseTargets(cmd, {{&hdr_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                         {&depth_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                         {&motion_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                         {&reactive_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                         {&upscaled_, VK_IMAGE_LAYOUT_GENERAL}});
+        if (up_.backend->External()) {
+            /* Metal does not know Vulkan layouts; GENERAL is the one layout that means the same to both sides. The inputs go back to
+               shader-read after the Metal work (below), where the post chain samples them. */
+            UseTargets(cmd, {{handy_demod_ ? &opaque_ : &hdr_, VK_IMAGE_LAYOUT_GENERAL},
+                             {&depth_, VK_IMAGE_LAYOUT_GENERAL},
+                             {&motion_, VK_IMAGE_LAYOUT_GENERAL},
+                             {&reactive_, VK_IMAGE_LAYOUT_GENERAL},
+                             {&exposure_image_, VK_IMAGE_LAYOUT_GENERAL},
+                             {&upscaled_, VK_IMAGE_LAYOUT_GENERAL}});
+        } else {
+            UseTargets(cmd, {{&hdr_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                             {&depth_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                             {&motion_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                             {&reactive_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                             {&upscaled_, VK_IMAGE_LAYOUT_GENERAL}});
+        }
         UpscaleDispatch d;
         d.cmd = cmd;
         d.color = Wrap(handy_demod_ ? opaque_ : hdr_);
@@ -493,7 +546,30 @@ void SceneRenderer::RecordUpscale(VkCommandBuffer cmd, float dt) {
             k.reset = d.reset;
             streamline::SetConstants(k);
         }
-        upscaled = up_.backend->Dispatch(d);
+        if (up_.backend->External()) {
+            /* MetalFX: the Vulkan work so far is submitted, the backend encodes its Metal command buffer between the two submits, and the rest
+               of the frame (recorded into the second command buffer) waits for it on the backend's timeline semaphore. The inputs and the
+               output are in GENERAL here; the UseTargets after the split moves them on. */
+            UpscaleBackend& backend = *up_.backend;
+            const uint64_t before = backend.NextTimelineValue();
+            d.cmd = VK_NULL_HANDLE;
+            EndLabel(cmd);
+            const bool split = renderer_->SplitFrame(backend.Timeline(), before, before + 2, [&] { upscaled = backend.EncodeExternal(d, before, before + 2); });
+            cmd = renderer_->Cmd();
+            BeginLabel(cmd, "upscale");
+            if (split) {
+                BindSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS);
+                UseTargets(cmd, {{&hdr_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                 {&opaque_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                 {&depth_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                 {&motion_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                 {&reactive_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                 {&exposure_image_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}});
+            }
+            upscaled = upscaled && split;
+        } else {
+            upscaled = up_.backend->Dispatch(d);
+        }
         FrameGeneration* fg = streamline::Active() ? UpscaleHost::Get().DlssFrameGenImpl() : UpscaleHost::Get().FrameGen();
         if (upscaled && fg && fg->Generating()) {
             FrameGenPrepare prepare;

@@ -74,6 +74,7 @@ bool Renderer::Init(SDL_Window* window, const RendererSettings& settings) {
         alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         alloc.commandBufferCount = 1;
         vkAllocateCommandBuffers(ctx_.device, &alloc, &frame.cmd);
+        vkAllocateCommandBuffers(ctx_.device, &alloc, &frame.cmd_post);
         VkSemaphoreCreateInfo semaphore_info{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         vkCreateSemaphore(ctx_.device, &semaphore_info, nullptr, &frame.image_available);
         VkFenceCreateInfo fence_info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
@@ -376,6 +377,7 @@ bool Renderer::BeginFrame(bool present) {
     }
     vkResetFences(ctx_.device, 1, &frame.in_flight);
     vkResetCommandPool(ctx_.device, frame.pool, 0);
+    frame.split = false;
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(frame.cmd, &begin);
@@ -418,9 +420,48 @@ void Renderer::Composite(VkCommandBuffer cmd, VkDescriptorSet set, float mode, V
     vkCmdDraw(cmd, 3, 1, 0, 0);
 }
 
+bool Renderer::SplitFrame(VkSemaphore timeline, uint64_t before, uint64_t after, const std::function<void()>& between) {
+    Frame& frame = frames_[frame_index_];
+    if (frame.split || !timeline) {
+        return false;
+    }
+    vkEndCommandBuffer(frame.cmd);
+    VkCommandBufferSubmitInfo cmd_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+    cmd_info.commandBuffer = frame.cmd;
+    VkSemaphoreSubmitInfo signal{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    signal.semaphore = timeline;
+    signal.value = before;
+    signal.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    submit.commandBufferInfoCount = 1;
+    submit.pCommandBufferInfos = &cmd_info;
+    submit.signalSemaphoreInfoCount = 1;
+    submit.pSignalSemaphoreInfos = &signal;
+    const VkResult submitted = vkQueueSubmit2(ctx_.queue, 1, &submit, VK_NULL_HANDLE);
+    ctx_.CheckDeviceLost(submitted, "frame submit (before the upscaler)");
+    if (submitted == VK_SUCCESS) {
+        between();
+    } else {
+        /* The first submit never reached the queue, so nothing would ever signal `before`, and the Metal work would wait for it forever.
+           Skip the outside work and signal `after` from the host: the second submit's wait clears and its fence still completes. The
+           caller sees that `between` did not run. All of the first submit's work is dropped, so this frame shows stale content. */
+        VkSemaphoreSignalInfo host{VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO};
+        host.semaphore = timeline;
+        host.value = after;
+        vkSignalSemaphore(ctx_.device, &host);
+    }
+    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(frame.cmd_post, &begin);
+    frame.split = true;
+    frame.split_timeline = timeline;
+    frame.split_value = after;
+    return true;
+}
+
 void Renderer::EndFrame(bool draw_ui) {
     Frame& frame = frames_[frame_index_];
-    VkCommandBuffer cmd = frame.cmd;
+    VkCommandBuffer cmd = frame.split ? frame.cmd_post : frame.cmd;
     vk::ImageBarrier(cmd, scene_color_.image, VK_IMAGE_ASPECT_COLOR_BIT,
                      VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                      VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -548,15 +589,25 @@ void Renderer::EndFrame(bool draw_ui) {
     wait.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSemaphoreSubmitInfo signal{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     signal.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSemaphoreSubmitInfo waits[2] = {wait, {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO}};
     VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
     submit.commandBufferInfoCount = 1;
     submit.pCommandBufferInfos = &cmd_info;
     if (presenting_) {
         signal.semaphore = ctx_.swapchain.render_finished[image_index_];
         submit.waitSemaphoreInfoCount = 1;
-        submit.pWaitSemaphoreInfos = &wait;
+        submit.pWaitSemaphoreInfos = waits;
         submit.signalSemaphoreInfoCount = 1;
         submit.pSignalSemaphoreInfos = &signal;
+    }
+    if (frame.split) {
+        /* the second submit of a split frame: the outside work (MetalFX) must be done before anything after it runs; it is also the only
+           submit that touches the swapchain image, so the acquire wait is here */
+        waits[submit.waitSemaphoreInfoCount].semaphore = frame.split_timeline;
+        waits[submit.waitSemaphoreInfoCount].value = frame.split_value;
+        waits[submit.waitSemaphoreInfoCount].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        ++submit.waitSemaphoreInfoCount;
+        submit.pWaitSemaphoreInfos = waits;
     }
     ctx_.CheckDeviceLost(vkQueueSubmit2(ctx_.queue, 1, &submit, frame.in_flight), "frame submit");
     streamline::SetMarker(streamline::Marker::RenderSubmitEnd);

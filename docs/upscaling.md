@@ -1,8 +1,8 @@
 # Upscaling and frame generation
 
 The original renders at 1920x1080 with FXAA. The port can render the scene at a lower internal resolution and
-reconstruct the output with a temporal upscaler (AMD FSR 3.1, NVIDIA DLSS 4.5, Intel XeSS), or keep the display
-resolution and use the upscaler as anti-aliasing (FSR native AA, DLAA). Everything here is off by default; with the
+reconstruct the output with a temporal upscaler (AMD FSR 3.1, NVIDIA DLSS 4.5, Intel XeSS, on macOS Apple MetalFX), or keep the display
+resolution and use the upscaler as anti-aliasing (FSR native AA, DLAA, MetalFX at ratio 1). Everything here is off by default; with the
 upscaler off the frame is the same as without this feature.
 
 ## Settings
@@ -11,10 +11,10 @@ upscaler off the frame is the same as without this feature.
 
 | key | values | meaning |
 | --- | --- | --- |
-| `upscaler` | `off`, `fsr3`, `fsr4`, `dlss`, `xess` | backend. The page lists every backend and greys the ones this machine or build cannot run, with the reason on the help line |
+| `upscaler` | `off`, `fsr3`, `fsr4`, `dlss`, `xess`, `metalfx` | backend. The page lists every backend and greys the ones this machine or build cannot run, with the reason on the help line |
 | `quality` | `native`, `quality`, `balanced`, `performance`, `ultra_performance`, `custom` | render scale 1/1.0, 1/1.5, 1/1.7, 1/2.0, 1/3.0 per axis (the FSR ratios, used for every backend), or `scale` |
 | `scale` | 0.25 to 1.0 | render scale per axis for `custom` |
-| `sharpness` | 0 to 1 | FSR: RCAS after the upscaler. DLSS has no sharpening |
+| `sharpness` | 0 to 1 | FSR: RCAS after the upscaler. DLSS and MetalFX have no sharpening |
 | `dlss_model` | `auto`, `k`, `l`, `m` | the DLSS Super Resolution model. `auto` is NVIDIA's default per quality (K for DLAA, quality and balanced, M for performance, L for ultra performance). L and M run in FP8, which RTX 20 and 30 cards lack, so they cost about twice as much there |
 | `frame_generation` | `off`, `fsr3`, `dlss` | one generated frame between two rendered frames. Needs a window and an upscaler (any backend and quality) |
 
@@ -64,6 +64,40 @@ that a restart is needed.
 
 XeSS SDK 3.0.2, `libxess.dll` next to `pt.exe`, loaded when XeSS is selected. GPUs other than Intel Arc
 run its DP4a model. The qualities use the XeSS preset with the same ratio; `custom` takes the nearest.
+
+### Apple MetalFX
+
+macOS only (`upscaler = metalfx`), the `MTLFXTemporalScaler` from the system's MetalFX framework; nothing to download. It is greyed
+with the reason where the build is not for macOS, MoltenVK lacks `VK_EXT_metal_objects`, or `supportsDevice:` is false. All
+qualities work, native AA is a ratio of 1. The GPU's supported ratio range (`supportedInputContentMin/MaxScaleForDevice`, 1.0 to 3.0
+on an M4) limits the render size: `custom` below 33% renders at 33%, and the F10 help line and `pt.log` say so. There is no sharpening.
+
+Interop: `VK_EXT_metal_objects` exports the MTLDevice and the MTLTexture behind each Vulkan image. MetalFX encodes into a
+Metal command buffer, so with it active the frame is two Vulkan submits instead of one. The first ends at the upscale and signals a
+timeline semaphore; the backend commits a Metal command buffer on its own queue that waits for that value (the semaphore is exported as an
+MTLSharedEvent), runs the scaler and signals the next value; the second submit waits for it. The swapchain acquire wait, the present
+signal and the frame fence stay on the second submit. The backend proves both directions of the event when it is first offered. If the first submit
+fails, the Metal work is skipped and the host signals the semaphore, so the second submit and the frame fence still complete (all of that
+submit's work is dropped, so that frame shows stale content). Under `--validation` or `PT_METALFX_HOST_SYNC` the CPU waits for the Metal
+work every frame and signals the semaphore from the host, because the validation layer cannot see Metal's signal and reports the
+present as unresolved.
+
+Conventions: depth is reversed (`depthReversed`), the motion vectors (previous minus current, in render-size fractions) are scaled by
+the render size, the reactive mask is used (macOS 14.4 and newer, else skipped), and the exposure is a 1x1 R16F texture holding the
+exposure value, clamped to the half-float range (the scene colour is not pre-multiplied, so `preExposure` stays 1). Jitter: the pixel offset of the projection, x right and y down, passed unchanged; of the four sign
+combinations on a static pose against a 4x supersampled frame, (+x, +y) was best (33.48 dB, least shimmer; wrong x worse than none).
+The images the upscaler reads and writes are in `GENERAL` layout
+across the Metal work and go back to shader-read after it. The Vulkan images that are exported carry `VkExportMetalObjectCreateInfoEXT`
+(and the instance the device one), as `VK_EXT_metal_objects` asks. On macOS the output image also has the colour attachment usage
+MetalFX asks for.
+
+Cost, measured on an M4 at 2560x1440, quality (1707x960 inside), 400 frames of a lit scene, GPU time a frame: native 28.5 ms; with the
+`spatial` test upscaler, which runs the same motion, reactive and resolve passes but no scaler, 19.1 ms (those passes 0.9 ms);
+MetalFX 24.9 ms. So MetalFX itself costs about 5.7 ms there: its Metal command buffer spans 6.2 ms on the GPU, which includes
+waiting for the Vulkan work before it and is not the scaler's own cost (4.3 ms at performance, 7.5 ms at native AA), and the reactive mask is 0.4 to 1.2 ms of that. The split of the
+submit is cheap: an empty Metal command buffer between the two submits adds 0.2 to 0.5 ms. Rendering at 1707x960 saves about 9.4 ms (native minus the spatial run),
+so quality is about 3.6 ms faster than native here, and slower than a bilinear upscale by the scaler's cost. `pt.log` has the average
+time of the Metal command buffer at exit.
 
 The three SDKs are Windows binaries, so the upscalers are left out of the Linux build (docs/linux.md).
 

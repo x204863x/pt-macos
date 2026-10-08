@@ -165,6 +165,7 @@ struct UpscaleStats {
     float upscale_ms = 0.0f;
     float inputs_ms = 0.0f;
     std::string error;
+    std::string note;
 };
 
 class SceneRenderer {
@@ -276,7 +277,7 @@ private:
     bool EnsureTargets(VkExtent2D extent, VkExtent2D output, bool upscaling);
     void DestroyTargets();
     void WriteImageDescriptors();
-    bool CreateTarget(RenderTarget& target, VkFormat format, VkExtent2D extent, VkImageUsageFlags usage, VkImageAspectFlags aspect);
+    bool CreateTarget(RenderTarget& target, VkFormat format, VkExtent2D extent, VkImageUsageFlags usage, VkImageAspectFlags aspect, bool export_metal = false);
     bool UploadImage(vk::Image& image, VkFormat format, VkExtent3D extent, const void* data, size_t size);
     bool UploadImageMips(vk::Image& image, VkFormat format, VkExtent3D extent, const std::vector<std::vector<uint8_t>>& mips);
     void CreateBuiltinResources();
@@ -343,7 +344,7 @@ private:
     void RecordDumpCopy(VkCommandBuffer cmd, RenderTarget& target, vk::Buffer& buffer);
     void RecordEffects(VkCommandBuffer cmd, RenderTarget& output, SceneVfxContext context);
     void RecordUpscaleInputs(VkCommandBuffer cmd, const ViewSetup& view);
-    void RecordUpscale(VkCommandBuffer cmd, float dt);
+    void RecordUpscale(VkCommandBuffer& cmd, float dt);
     void ReadUpscaleTimestamps(FrameSlot& slot);
 
     static constexpr uint32_t kTimestamps = 12;

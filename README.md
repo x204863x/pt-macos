@@ -53,7 +53,7 @@ These come from the original port; they are not all re-tested on macOS. Everythi
 ## What is off on macOS
 
 - Ray-traced shadows, contact shadows, ambient occlusion and reflections: MoltenVK has no ray queries; the renderer uses its fallback.
-- FSR, DLSS and XeSS upscaling, frame generation, and VR (OpenXR): Windows only.
+- FSR, DLSS and XeSS upscaling, frame generation, and VR (OpenXR): Windows only. Apple MetalFX upscaling is available (F10, Upscaler; see docs/upscaling.md).
 - Enhanced textures (Real-ESRGAN): there is no macOS build of the tool, so the original textures are used.
 - Voice recognition runs on the CPU only.
 - No crash dump and no self-update.

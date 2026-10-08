@@ -65,7 +65,7 @@ bundle does not ship the Khronos loader. `MacVulkanLibrary()` (`src/engine/rende
 ## What is different or off on macOS
 
 - Ray tracing: MoltenVK has no `VK_KHR_acceleration_structure`; the renderer reports "ray queries unavailable" and uses its fallback.
-- FSR, DLSS, XeSS, frame generation, OpenXR: Windows-only, off (as on Linux).
+- FSR, DLSS, XeSS, frame generation, OpenXR: Windows-only, off (as on Linux). Apple MetalFX is the macOS upscaler (docs/upscaling.md); it needs `VK_EXT_metal_objects`, which MoltenVK offers. Under `--validation` or `PT_METALFX_HOST_SYNC` the CPU waits for the Metal work every frame (the validation layer cannot see Metal's signal).
 - Enhanced textures (Real-ESRGAN): no macOS binary; the option reports missing tools and the original textures are used.
 - Voice (whisper.cpp): works, CPU only (no Metal backend); the matching `ggml-cpu-apple_*` variant is chosen for the CPU.
 - No crash dump. No Windows installer; no self-update (the update check only reports a newer macOS release).
@@ -95,6 +95,8 @@ Everything is behind `__APPLE__` / `if(APPLE)`; Windows and Linux are unchanged 
 | `src/engine/anim/anim_test.cpp` | floating-point `std::from_chars` needs macOS 26's libc++; `strtod` is used on Apple (deployment target 14). |
 | `src/engine/core/resource_path.cpp` (all platforms) | intentional behaviour change on Windows/Linux: the helper process path is now built with `ExecutableDir() / "pt(.exe)"` inside `SelfExecutablePath()` where `main.cpp` used `std::filesystem::path(SDL_GetBasePath()) / ...`; the base path is now converted as UTF-8 (`ExecutableDir()`), so non-ASCII install folders work for the previews. |
 | `CMakeLists.txt` | deployment target 14.0, arm64. |
+| `src/engine/render/upscale/metalfx_backend.mm`, `cmake/Upscalers.cmake` | the MetalFX upscaler (Objective-C++, ARC, `-framework Metal -framework MetalFX`); `UpscaleHost::DeviceSetup` enables `VK_EXT_metal_objects`. |
+| `src/engine/render/renderer.{h,cpp}`, `src/engine/render/upscale/scene_upscale.cpp` | `Renderer::SplitFrame`: with MetalFX the frame is two Vulkan submits with the Metal work between them (docs/upscaling.md). Without it the frame is one submit as before. On Apple the upscaled image also gets the colour attachment usage and the exposure image is R16F, both MetalFX requirements. |
 
 Related prior work (MIT): the upstream pull request LoreanXavier/pt-pc#4 and the `macos-arm64-preview-2` branch of ignusloki/pt-pc. This implementation was written independently; no code was copied from them.
 

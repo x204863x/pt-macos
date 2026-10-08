@@ -9,7 +9,9 @@ Native Apple Silicon build of P.T. for PC (v1.0.1, release @VERSION@), running o
 4. Allow the microphone when asked (voice scene).
 Details: INSTALL-macOS.md and docs/macos.md.
 
-**Off or different on Mac**: no ray tracing (MoltenVK), no FSR/DLSS/XeSS/frame generation/OpenXR, enhanced textures unavailable, voice recognition on CPU, mods in `~/Library/Application Support/pt-port/pt/mods`. Includes a fix for speckled/dark lighting under MoltenVK. Known limitation: while the first-start folder dialog is open, Cmd-Q does not close the app (use Cancel).
+**New in macos.2**: Apple MetalFX temporal upscaling. Turn it on in F10 > Upscaling, or with `upscaler = metalfx` in pt.ini; it works with every quality mode, native AA included.
+
+**Off or different on Mac**: no ray tracing (MoltenVK), no FSR/DLSS/XeSS/frame generation/OpenXR (Apple MetalFX is the upscaler), enhanced textures unavailable, voice recognition on CPU, mods in `~/Library/Application Support/pt-port/pt/mods`. Includes a fix for speckled/dark lighting under MoltenVK. Known limitation: while the first-start folder dialog is open, Cmd-Q does not close the app (use Cancel).
 
 **Credits**: original port LoreanXavier/pt-pc (MIT); MoltenVK, Khronos Group (Apache-2.0); LibOrbisPkg PkgTool (MIT) for the extraction helper; whisper.cpp (MIT); other notices in the app's Contents/Resources/licenses.
 

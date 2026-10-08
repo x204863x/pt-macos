@@ -1173,7 +1173,7 @@ bool DrawUpscaleSettings(App& app) {
     bool changed = false;
     ImGui::SeparatorText("Upscaling");
     const pt::UpscalerKind kinds[] = {pt::UpscalerKind::Off, pt::UpscalerKind::Fsr, pt::UpscalerKind::Fsr4, pt::UpscalerKind::Dlss,
-                                      pt::UpscalerKind::Xess};
+                                      pt::UpscalerKind::Xess, pt::UpscalerKind::MetalFx};
     if (ImGui::BeginCombo("Upscaler", pt::UpscalerName(u.kind))) {
         for (pt::UpscalerKind kind : kinds) {
             std::string reason;
@@ -1721,7 +1721,10 @@ public:
         const pt::UpscaleSettings& u = app_.scene.upscale;
         const bool off = u.kind == pt::UpscalerKind::Off;
         pt::game::PcSettingSection upscaling{"pc_section_upscaling", 0, {}};
-        const std::string upscaler_note = off ? std::string("pc_note_upscaler_off") : std::format("{}.", pt::UpscalerName(u.kind));
+        const std::string& range_note = app_.scene.UpscaleStatistics().note;
+        const std::string upscaler_note = off ? std::string("pc_note_upscaler_off")
+                                              : range_note.empty() ? std::format("{}.", pt::UpscalerName(u.kind))
+                                                                   : std::format("{}. {}", pt::UpscalerName(u.kind), range_note);
         pt::game::PcSettingRow upscaler = Row(kUpscaler, "pc_upscaler", {}, 0, upscaler_note);
         const std::vector<pt::UpscalerKind> kinds = Upscalers(&upscaler.value_notes);
         for (const pt::UpscalerKind kind : kinds) {
@@ -2807,6 +2810,7 @@ private:
         case pt::UpscalerKind::Fsr4: return "FSR 4";
         case pt::UpscalerKind::Dlss: return "DLSS";
         case pt::UpscalerKind::Xess: return "XeSS";
+        case pt::UpscalerKind::MetalFx: return "MetalFX";
         default: return pt::UpscalerName(kind);
         }
     }
@@ -2814,7 +2818,7 @@ private:
     std::vector<pt::UpscalerKind> Upscalers(std::vector<std::string>* notes) const {
         std::vector<pt::UpscalerKind> kinds{pt::UpscalerKind::Off};
         if (notes) notes->assign(1, std::string());
-        for (const pt::UpscalerKind kind : {pt::UpscalerKind::Fsr, pt::UpscalerKind::Fsr4, pt::UpscalerKind::Dlss, pt::UpscalerKind::Xess}) {
+        for (const pt::UpscalerKind kind : {pt::UpscalerKind::Fsr, pt::UpscalerKind::Fsr4, pt::UpscalerKind::Dlss, pt::UpscalerKind::Xess, pt::UpscalerKind::MetalFx}) {
             std::string reason;
             const bool available = app_.scene.UpscalerAvailable(kind, reason);
             kinds.push_back(kind);
