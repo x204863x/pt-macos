@@ -3,7 +3,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
+#include <cstdlib>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -170,11 +172,28 @@ private:
             return true;
         }
         double d = 0.0;
+#ifdef __APPLE__
+        // libc++ shipped with macOS 14 has no floating-point std::from_chars (it needs macOS 26): strtod on a copy of the number
+        {
+            size_t end = pos_;
+            while (end < text_.size() && (std::isdigit(static_cast<unsigned char>(text_[end])) || text_[end] == '-' || text_[end] == '+' ||
+                                          text_[end] == '.' || text_[end] == 'e' || text_[end] == 'E'))
+                ++end;
+            const std::string number = text_.substr(pos_, end - pos_);
+            char* stop = nullptr;
+            d = std::strtod(number.c_str(), &stop);
+            if (stop == number.c_str()) {
+                return false;
+            }
+            pos_ += static_cast<size_t>(stop - number.c_str());
+        }
+#else
         const auto result = std::from_chars(text_.data() + pos_, text_.data() + text_.size(), d);
         if (result.ec != std::errc()) {
             return false;
         }
         pos_ = static_cast<size_t>(result.ptr - text_.data());
+#endif
         out.type = Number;
         std::memcpy(&out.data, &d, 8);
         return true;
